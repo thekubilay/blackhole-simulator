@@ -16,6 +16,8 @@ html,
 body {
   margin: 0;
   height: 100%;
+  /* iOS Safari yatayda yazıyı kendiliğinden büyütmesin */
+  -webkit-text-size-adjust: 100%;
   overflow: hidden;
   background: #000;
   font-family: var(--font-body);
@@ -74,7 +76,9 @@ a:hover {
 .brand {
   position: fixed;
   top: 14px;
+  top: max(14px, env(safe-area-inset-top));
   left: 16px;
+  left: max(16px, env(safe-area-inset-left));
   display: flex;
   align-items: center;
   gap: 10px;
@@ -224,6 +228,7 @@ a:hover {
   position: fixed;
   top: 12px;
   right: 16px;
+  right: max(16px, env(safe-area-inset-right));
   display: flex;
   gap: 16px;
   padding: 8px 14px;
@@ -250,6 +255,7 @@ a:hover {
 .dock {
   position: fixed;
   right: 16px;
+  right: max(16px, env(safe-area-inset-right));
   top: 72px;
   bottom: 40px;
   width: 420px;
@@ -291,6 +297,8 @@ a:hover {
   overflow-y: auto;
   min-height: 0;
   padding: 12px 18px 16px;
+  /* dokunmatikte kaydırma sayfaya zincirlenmesin */
+  overscroll-behavior: contain;
 }
 .kv {
   display: flex;
@@ -311,6 +319,7 @@ a:hover {
   position: fixed;
   left: 50%;
   bottom: 18px;
+  bottom: calc(18px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   padding: 10px 22px 12px;
   display: flex;
@@ -426,4 +435,125 @@ a:hover {
 ::-webkit-scrollbar-thumb {
   background: rgba(255, 154, 77, 0.3);
   border-radius: 99px;
+}
+/* sol kontrol paneli (ControlsPanel) */
+.controls {
+  position: fixed;
+  top: 54px;
+  left: 16px;
+  left: max(16px, env(safe-area-inset-left));
+  width: 248px;
+  padding: 12px 14px;
+  font-size: 11px;
+  user-select: none;
+  -webkit-user-select: none;
+  /* kısa pencerede alttaki telemetri kartıyla çakışma: panel kayar
+     (dvh: iOS Safari adres çubuğu 100vh'yi şişirir) */
+  max-height: max(200px, calc(100vh - 400px));
+  max-height: max(200px, calc(100dvh - 400px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* sağ alt bilimsel dipnot */
+.footnote {
+  position: fixed;
+  right: 16px;
+  bottom: 10px;
+  font-size: 9px;
+  color: #6b6055;
+  letter-spacing: 0.04em;
+}
+/* ── dokunmatik cihazlar: parmak hedefleri ─────────────────────── */
+@media (pointer: coarse) {
+  .ui button {
+    min-height: 40px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ui .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+  .ui input[type='range'] {
+    height: 32px;
+  }
+  .ui input[type='range']::-webkit-slider-runnable-track {
+    height: 6px;
+  }
+  .ui input[type='range']::-webkit-slider-thumb {
+    width: 22px;
+    height: 22px;
+    margin-top: -8px;
+  }
+  .ui input[type='range']::-moz-range-track {
+    height: 6px;
+  }
+  .ui input[type='range']::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+  }
+}
+/* ── telefon (dar ekran) yerleşimi ─────────────────────────────── */
+@media (max-width: 640px) {
+  :root {
+    /* blur kapalıyken kart zemini daha opak kalmalı */
+    --card-bg: rgba(15, 11, 8, 0.97);
+  }
+  /* iOS Safari'de backdrop blur her karede büyük GPU maliyeti — mobilde kapalı */
+  .card,
+  .ui .icon-btn,
+  .ui .telemetry-clear {
+    backdrop-filter: none;
+  }
+  .brand {
+    top: max(10px, env(safe-area-inset-top));
+    left: 12px;
+  }
+  /* HUD logo satırının altına iner: tam genişlik, gerekirse yatay kayar */
+  .hud {
+    top: calc(max(10px, env(safe-area-inset-top)) + 52px);
+    left: 12px;
+    right: 12px;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .hud::-webkit-scrollbar {
+    display: none;
+  }
+  .hud .stat {
+    min-width: 0;
+    flex: 1 0 auto;
+  }
+  .controls {
+    top: calc(max(10px, env(safe-area-inset-top)) + 108px);
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: max(180px, calc(100vh - 320px));
+    max-height: max(180px, calc(100dvh - 320px));
+    /* açıkken dock butonlarının üstünde durur */
+    z-index: 5;
+  }
+  .dock {
+    top: calc(max(10px, env(safe-area-inset-top)) + 108px);
+    left: 12px;
+    right: 12px;
+    width: auto;
+    /* alt-orta telemetri şeridine yer bırakılır (şerit ~185px) */
+    bottom: calc(190px + env(safe-area-inset-bottom));
+  }
+  .telemetry {
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    padding: 8px 12px 10px;
+    max-width: calc(100vw - 20px);
+  }
+  .telemetry .stat {
+    min-width: 64px;
+  }
+  .footnote {
+    display: none;
+  }
 }

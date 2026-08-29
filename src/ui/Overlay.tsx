@@ -32,7 +32,7 @@ export function Overlay({ controller }: { controller: LabController }) {
         {quantOpen && <QuantumPanel onClose={() => setQuantOpen(false)} />}
         {physOpen && <PhysicsPanel onClose={() => setPhysOpen(false)} />}
       </div>
-      <div style={{ position: 'fixed', right: 16, bottom: 10, fontSize: 9, color: '#6b6055', letterSpacing: '.04em' }}>
+      <div className="footnote">
         tam Kerr ekvatoral jeodezikleri (BPT 1972) · uzak gözlemci zamanı · jeodezik ışın izleme
       </div>
     </div>

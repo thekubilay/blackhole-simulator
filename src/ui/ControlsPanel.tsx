@@ -10,7 +10,8 @@ const MODES: [SpawnMode, string][] = [
 ]
 
 export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
-  const [open, setOpen] = useState(true)
+  // dar ekranda panel sahneyi kapladığı için telefonda kapalı başlar
+  const [open, setOpen] = useState(() => window.matchMedia('(min-width: 641px)').matches)
   return (
     <>
       {/* logo + panel aç/kapa: her zaman görünür, panelin dışında */}
@@ -34,21 +35,7 @@ export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) 
         </button>
       </div>
       {open && (
-        <div
-          className="card"
-          style={{
-            position: 'fixed',
-            top: 54,
-            left: 16,
-            width: 248,
-            padding: '12px 14px',
-            fontSize: 11,
-            userSelect: 'none',
-            // kısa pencerede alttaki telemetri kartıyla çakışma: panel kayar
-            maxHeight: 'calc(100vh - 400px)',
-            overflowY: 'auto',
-          }}
-        >
+        <div className="card controls">
           <div className="subtitle" style={{ margin: '0 0 4px' }}>
             {s.hole.name} · {s.hole.massLabel} · r₊ = 1 birim
           </div>

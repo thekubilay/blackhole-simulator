@@ -16,13 +16,18 @@ export class QualityGovernor {
   private stable = 0
   private readonly listeners = new Set<(level: QualityLevel) => void>()
 
-  constructor(deviceRatio: number) {
+  constructor(deviceRatio: number, coarsePointer = false) {
     this.levels = [
       { label: 'yüksek', dpr: Math.min(deviceRatio, 1.6), steps: 240 },
       { label: 'orta', dpr: Math.min(deviceRatio, 1.25), steps: 185 },
-      // kalite tabanı: bundan daha bloklu asla olmaz
+      // kalite tabanı (masaüstü): bundan daha bloklu asla olmaz
       { label: 'düşük', dpr: 1.0, steps: 150 },
     ]
+    if (coarsePointer) {
+      // telefon GPU'su tabana da yetişemezse son çare — yalnız dokunmatik cihazlarda
+      this.levels.push({ label: 'mobil', dpr: 0.75, steps: 110 })
+      this.level = 2 // dokunmatikte 'düşük'ten başla; güç yeterse governor yukarı tırmanır
+    }
   }
 
   get current(): QualityLevel {

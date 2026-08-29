@@ -19,7 +19,8 @@ import { Overlay } from './ui/Overlay'
 /** Kompozisyon kökü: bağımlılıklar burada kurulur ve enjekte edilir (DIP). */
 export default function App() {
   const { controller, governor } = useMemo(() => {
-    const governor = new QualityGovernor(window.devicePixelRatio)
+    const coarsePointer = window.matchMedia('(pointer: coarse)').matches
+    const governor = new QualityGovernor(window.devicePixelRatio, coarsePointer)
     const initial = PRESETS[DEFAULT_PRESET_ID]
     const sim = new Simulation(initial.engine, BODY_REGISTRY, initial.profile)
     const controller = new LabController(sim, governor, BODY_REGISTRY, PRESETS, DEFAULT_PRESET_ID)
