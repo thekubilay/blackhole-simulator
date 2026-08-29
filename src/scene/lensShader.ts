@@ -63,8 +63,18 @@ vec3 bbRamp(float x){
   vec3 cold = vec3(1.0,.22,.04), mid = vec3(1.0,.88,.72), hot = vec3(.62,.76,1.35);
   return x < 1.0 ? mix(cold, mid, smoothstep(.12,1.,x)) : mix(mid, hot, smoothstep(1.,1.9,x));
 }
-void sampleDisk(vec3 hp, vec3 vn, inout vec4 acc){
+// ince disk kalınlık profili: dışa doğru alevlenir (Shakura–Sunyaev H ∝ r^(9/8)
+// biçimini izler); görsel okunabilirlik için fiziksel H/r (~0.02) abartılıdır
+float diskH(float rr){ return 0.05 + 0.052*rr; }
+// hp: örnek noktası (y ≠ 0 olabilir — hacim örneği), H: yerel yarı kalınlık,
+// dsl: bu örneğin temsil ettiği ışın yolu uzunluğu (hacim entegrasyon ağırlığı)
+void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
   float rr = length(hp.xz);
+  // dikey Gauss zarfı: gaz düzlemden uzaklaştıkça pamuksu söner
+  float gz = exp(-(hp.y*hp.y)/(H*H));
+  // kalınlık boyunca iç yapı: yükseklik doku aramasını yatay kaydırır (ucuz
+  // sözde-3B) — üst/alt katmanlar farklı bulut deseni görür, paralaks doğar
+  vec2 hxz = hp.xz + vec2(hp.y*1.6, -hp.y*1.2);
   // iki RİJİT dönen gürültü katmanı (iç hızlı, dış yavaş), yarıçapla harmanlı:
   // zaman bağımlı her açı yarıçaptan bağımsız — kayma ASLA birikmez,
   // bulut dokusu t=0 ile t=1s'te istatistiksel olarak aynıdır
@@ -74,11 +84,11 @@ void sampleDisk(vec3 hp, vec3 vn, inout vec4 acc){
   float w = smoothstep(3.2, 8.5, rr);
   float n = 0.;
   if(w < 0.999){
-    vec2 qA = rot(uTime*0.045 + spiral) * hp.xz;
+    vec2 qA = rot(uTime*0.045 + spiral) * hxz;
     n = 0.50*fbm(qA*1.35) + 0.32*fbm3(qA*3.6) + 0.18*fbm3(qA*7.4);
   }
   if(w > 0.001){
-    vec2 qB = rot(uTime*0.012 + spiral + 1.7) * hp.xz;
+    vec2 qB = rot(uTime*0.012 + spiral + 1.7) * hxz;
     float nB = 0.50*fbm(qB*1.35 + 31.7) + 0.32*fbm3(qB*3.6 + 11.3) + 0.18*fbm3(qB*7.4 + 5.9);
     n = (w < 0.999) ? mix(n, nB, w) : nB;
   }
@@ -114,9 +124,41 @@ void sampleDisk(vec3 hp, vec3 vn, inout vec4 acc){
   // disk mavi-beyaz, yaklaşan taraf maviye, uzaklaşan/iç bölge kızıla
   float tRel = 1.35 * pow(uDiskIn/max(rr,uDiskIn), 0.75) * shift;
   vec3 c = mix(cA, bbRamp(tRel), uRealism);
-  float a = clamp(E*.55,0.,.95);
+  // hacim ağırlığı: Gauss yoğunluk × (yol/kalınlık); 0.5 = dik geçişin
+  // toplamı eski tek-örnek pozlamayla eşleşir (Σwv ≈ 1)
+  float wv = gz * (dsl/H) * 0.5;
+  float aRaw = clamp(E*.55, 0., .95);
+  // Beer–Lambert benzeri birikim: alfa wv ile üstel doygunlaşır — düzlemi
+  // sıyıran ışında örnekler üst üste PATLAMAZ, opaklaşıp erken sonlanır
+  float aStep = 1. - pow(1. - aRaw, wv);
+  acc.rgb += (1.-acc.a)*c*E*wv;
+  acc.a  += (1.-acc.a)*aStep*.7;
+}
+// ucuz hacimsel "atmosfer": diskin üstünde/altında pamuksu gaz halesi.
+// Pahalı disk dokusu YOK (yalnız 2 vnoise oktavı) — keskin detay düzlem
+// kesişimindeki sampleDisk'te kalır; bu katman dikey dolgunluğu, tüylü
+// silueti ve iç kenardaki bulut simidini verir. Sıyıran ışında bile maliyet
+// segment başına 1 örnektir — doku ortalamaya girip lapalaşmaz
+void sampleAtmo(vec3 hp, vec3 vn, float H, float ds, inout vec4 acc){
+  float rr = length(hp.xz);
+  if(rr < uDiskIn || rr > R_OUT) return;
+  float gz = exp(-(hp.y*hp.y)/(H*H));
+  float spiral = 2.6*log(rr);
+  vec2 q = rot(uTime*0.045 + spiral) * (hp.xz + vec2(hp.y*1.6, -hp.y*1.2));
+  // tek oktav yeter: haze düşük frekanslıdır, kontrastı lump² verir
+  float lump = vnoise(q*1.4);
+  float fade = smoothstep(uDiskIn, uDiskIn+0.5, rr) * pow(smoothstep(R_OUT, R_OUT-6.5, rr), 2.3);
+  float D = fade * (0.25 + 0.75*lump*lump) * pow(uDiskIn/rr, 2.6);
+  vec3 td = normalize(vec3(-hp.z, 0., hp.x));
+  float beta = clamp(sqrt(0.5/max(rr,1.4)), 0., 0.62);
+  float gamma = 1./sqrt(1.-beta*beta);
+  float dop = 1./(gamma*(1.+beta*dot(td,vn)));
+  float gfac = sqrt(max(1.-1./rr, 0.03));
+  float boost = mix(pow(dop,3.6)*gfac, 0.16*(2.35/uDiskIn)*pow(dop*gfac,4.0), uRealism);
+  vec3 c = mix(diskRamp(rr), bbRamp(1.35*pow(uDiskIn/max(rr,uDiskIn),0.75)*dop*gfac), uRealism);
+  float E = D * gz * (ds/H) * 0.5 * boost * (0.85 + 2.2*uEff);
   acc.rgb += (1.-acc.a)*c*E;
-  acc.a  += (1.-acc.a)*a*.7;
+  acc.a  += (1.-acc.a)*clamp(E*.4,0.,.9)*.7;
 }
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.); }
 void main(){
@@ -134,7 +176,7 @@ void main(){
       if(t > 0.){
         vec3 hp = p + v*t;
         float rr = length(hp.xz);
-        if(rr>uDiskIn && rr<R_OUT) sampleDisk(hp, v, acc);
+        if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, v, Hh, 2.0*Hh, acc); }
       }
     }
     // pozlama ödünü: gerçekçi modda disk parlaklığı yıldızları bastırır
@@ -164,11 +206,24 @@ void main(){
     vec3 a = -1.5*h2*p/(r2*r2*r);
     vec3 pPrev = p;
     v += a*dt; p += v*dt;
+    // disk geçişi: düzlem kesişiminde TEK tam kalite doku örneği (dsl=2H ile
+    // pozlama eski tek-örnek değerine normalize) + kesişime ÇAPALI 4 ucuz
+    // atmosfer örneği: ±y'de pamuksu hacim, ana döngüye adım-başı yük SIFIR
     if(pPrev.y*p.y < 0.){
       float t = pPrev.y/(pPrev.y-p.y);
       vec3 hp = mix(pPrev, p, t);
       float rr = length(hp.xz);
-      if(rr>uDiskIn && rr<R_OUT) sampleDisk(hp, normalize(v), acc);
+      vec3 vnn = normalize(v);
+      if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, vnn, Hh, 2.0*Hh, acc); }
+      if(rr>uDiskIn-1.5 && rr<R_OUT+0.5 && acc.a < 0.95){
+        float Hh = diskH(rr);
+        // sıyıran ışında ışın-boyu yayılım sınırlandırılır (doku lapalaşmasın)
+        float su = 0.85*Hh/clamp(abs(vnn.y), 0.35, 1.);
+        for(int k=0;k<4;k++){
+          float s = (float(k)-1.5)*su;
+          sampleAtmo(hp + vnn*s, vnn, Hh, su, acc);
+        }
+      }
     }
     if(acc.a > 0.99) break;
   }
