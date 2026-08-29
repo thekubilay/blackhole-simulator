@@ -80,6 +80,14 @@ export function QuantumPanel() {
   }, [])
   return (
     <>
+      <div className="sect">● KARA DELİK TAM KARA DEĞİL</div>
+      <div className="body">
+        1974'te Hawking, ufkun hemen dışına kuantum alan kuramını uyguladı ve şaşırtıcı bir sonuca vardı:
+        karadelikler kusursuz karanlık değildir. Ufuk civarındaki kuantum dalgalanmaları, delikten dışarı sızan
+        çok zayıf bir ısıl ışıma üretir — yani her karadeliğin bir <b>sıcaklığı</b> vardır. Ve bu sıcaklık
+        kütleyle <b>ters</b> orantılıdır: delik büyüdükçe soğur. Aşağıdaki değerler 10 M☉'lik referans delik
+        için tam formüllerle hesaplanır — hiçbiri yuvarlak sayı değildir.
+      </div>
       <Row k="UFUK ALANI" v={exp2(Q.A) + ' m²'} />
       <Row k="ENTROPİ S/k_B" v={exp2(Q.S)} />
       <Row k="T_H (Hawking)" v={exp2(Q.TH) + ' K'} />
@@ -87,8 +95,19 @@ export function QuantumPanel() {
       <div style={{ color: '#8d7f70', fontSize: 9, letterSpacing: '.12em', margin: '6px 0 12px' }}>
         BEKENSTEIN–HAWKING · M = 10 M☉ REFERANS
       </div>
-      <div style={{ color: '#e8ded2', fontSize: 11, letterSpacing: '.12em', marginBottom: 6 }}>
-        HAWKING TAYFI <span style={{ float: 'right', color: '#8d7f70' }}>T_H = {exp2(Q.TH)} K</span>
+      <div className="body">
+        Sayıların dili: bu deliğin sıcaklığı mutlak sıfırın yalnızca <b>milyarda 6 Kelvin</b> üstünde — evreni
+        dolduran fosil ışımadan (CMB, 2.7 K) bile yüz milyonlarca kat soğuk. Bu yüzden bugün küçülmeye
+        başlayamaz bile: çevresinden yuttuğu ışıma, yaydığından fazladır; buharlaşmanın öne geçmesi için evrenin
+        ondan da soğuk olacağı uzak çağları beklemesi gerekir. Tam buharlaşma ~10⁷⁰ yıl sürer — evrenin bugünkü
+        yaşının (1.4×10¹⁰ yıl) yaklaşık 10⁶⁰ katı. Entropisi ise 10⁷⁹ mertebesinde: karadelikler, doğanın
+        bildiğimiz en yüksek entropili nesneleridir — evrenin toplam düzensizlik bütçesini onlar domine eder.
+      </div>
+      <div className="sect">● HAWKING TAYFI</div>
+      <div className="body">
+        Eğri bu ışımanın tayfıdır: T<sub>H</sub> sıcaklığında <b>kusursuz bir kara cisim</b> (Planck) eğrisi.
+        Tepesi ~363 Hz'de — kulağınızın duyabileceği bir frekans sayısı, ama bunlar ses değil: dalga boyu ~800
+        km'yi bulan radyo fotonlarıdır. Her iki eksen de logaritmiktir; kesikli çizgi tepe frekansını işaretler.
       </div>
       <canvas ref={cv} style={{ width: '100%', display: 'block' }} />
       <div style={{ color: '#8d7f70', fontSize: 9, lineHeight: 1.6, marginTop: 10, letterSpacing: '.08em' }}>
