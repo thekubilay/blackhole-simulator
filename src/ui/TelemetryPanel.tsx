@@ -17,7 +17,7 @@ function Cell({ k, v, accent, children }: { k: string; v: ReactNode; accent?: bo
 /**
  * Kompakt telemetri şeridi: yalnız bir cisim bırakıldığında, alt-ortadan
  * animasyonla yükselir. Sahneyi doldurmaz — beş hücre + durum + gelgit çizgisi.
- * Kızıla kayma / anlık genişleme sağ üst HUD'da olduğundan burada yoktur.
+ * Kızıla kayma / anlık genişleme burada yoktur (HUD'daki hücreleri de şimdilik yorumda).
  */
 export function TelemetryPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
   const F = s.focus

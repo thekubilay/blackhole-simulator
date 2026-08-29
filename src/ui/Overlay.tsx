@@ -6,6 +6,7 @@ import { ControlsPanel } from './ControlsPanel'
 import { TelemetryPanel } from './TelemetryPanel'
 import { PhysicsPanel } from './PhysicsPanel'
 import { QuantumPanel } from './QuantumPanel'
+import { Dialog } from './Dialog'
 
 export function Overlay({ controller }: { controller: LabController }) {
   const s = useLabSnapshot(controller)
@@ -29,9 +30,17 @@ export function Overlay({ controller }: { controller: LabController }) {
             </button>
           )}
         </div>
-        {quantOpen && <QuantumPanel onClose={() => setQuantOpen(false)} />}
-        {physOpen && <PhysicsPanel onClose={() => setPhysOpen(false)} />}
       </div>
+      {quantOpen && (
+        <Dialog onClose={() => setQuantOpen(false)}>
+          <QuantumPanel onClose={() => setQuantOpen(false)} />
+        </Dialog>
+      )}
+      {physOpen && (
+        <Dialog onClose={() => setPhysOpen(false)}>
+          <PhysicsPanel onClose={() => setPhysOpen(false)} />
+        </Dialog>
+      )}
       <div className="footnote">
         tam Kerr ekvatoral jeodezikleri (BPT 1972) · uzak gözlemci zamanı · jeodezik ışın izleme
       </div>

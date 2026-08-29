@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useMedia } from 'react-use'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { DEFAULT_PRESET_ID, PRESETS } from './physics/presets'
@@ -18,8 +19,9 @@ import { Overlay } from './ui/Overlay'
 
 /** Kompozisyon kökü: bağımlılıklar burada kurulur ve enjekte edilir (DIP). */
 export default function App() {
+  const coarsePointer = useMedia('(pointer: coarse)')
+  // deps boş: simülasyon bir kez kurulur, kuruluştaki işaretçi türü kullanılır
   const { controller, governor } = useMemo(() => {
-    const coarsePointer = window.matchMedia('(pointer: coarse)').matches
     const governor = new QualityGovernor(window.devicePixelRatio, coarsePointer)
     const initial = PRESETS[DEFAULT_PRESET_ID]
     const sim = new Simulation(initial.engine, BODY_REGISTRY, initial.profile)

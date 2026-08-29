@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { LabSnapshot } from '../sim/types'
-import { fmtBig } from './format'
+// import { fmtBig } from './format' // KIZILA KAYMA / ZAMAN GEN. hücreleri yorumda
 
 function Stat({ k, v }: { k: string; v: ReactNode }) {
   return (
@@ -12,14 +12,15 @@ function Stat({ k, v }: { k: string; v: ReactNode }) {
 }
 
 export function HudStrip({ s }: { s: LabSnapshot }) {
-  const F = s.focus
   return (
     <div className="card hud">
       <Stat k="FPS" v={s.fps} />
       <Stat k="KALİTE" v={s.quality} />
       <Stat k="SPİN a*" v={s.hole.spinLabel} />
-      <Stat k="KIZILA KAYMA" v={F ? 'z=' + fmtBig(F.z, 2) : '—'} />
-      <Stat k="ZAMAN GEN." v={F ? fmtBig(F.dil) + '×' : '—'} />
+      {/* kızıla kayma / zaman genişlemesi şimdilik gizli
+      <Stat k="KIZILA KAYMA" v={s.focus ? 'z=' + fmtBig(s.focus.z, 2) : '—'} />
+      <Stat k="ZAMAN GEN." v={s.focus ? fmtBig(s.focus.dil) + '×' : '—'} />
+      */}
     </div>
   )
 }

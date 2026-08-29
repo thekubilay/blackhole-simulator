@@ -90,10 +90,23 @@ a:hover {
   white-space: nowrap;
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85);
 }
-.brand button {
+/* sol alt köşe araçları: kontrol dialogu + başa sarma, üst üste */
+.corner-tools {
+  position: fixed;
+  left: 16px;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 3;
+}
+.corner-tools button {
   pointer-events: auto;
 }
 .ui .icon-btn {
+  border: none;
   width: 32px;
   height: 32px;
   padding: 0;
@@ -233,6 +246,7 @@ a:hover {
   gap: 16px;
   padding: 8px 14px;
   border-radius: 14px;
+  border: none;
 }
 .stat {
   text-align: center;
@@ -251,19 +265,12 @@ a:hover {
   color: var(--ink);
   margin-top: 2px;
 }
-/* sağ panel kolonu: aç/kapa butonları + açık paneller alanı paylaşır */
+/* sağ üst: panel dialoglarını açan butonlar (paneller merkez dialogda açılır) */
 .dock {
   position: fixed;
   right: 16px;
   right: max(16px, env(safe-area-inset-right));
   top: 72px;
-  bottom: 40px;
-  width: 420px;
-  max-width: calc(100vw - 32px);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
   pointer-events: none;
   z-index: 4;
 }
@@ -325,7 +332,8 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-width: min(760px, calc(100vw - 32px));
+  /* sol/sağ alt köşe araçlarıyla çakışmasın diye kenarlardan 64px pay */
+  max-width: min(760px, calc(100vw - 128px));
   animation: telemetry-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes telemetry-rise {
@@ -336,6 +344,17 @@ a:hover {
   to {
     opacity: 1;
     transform: translate(-50%, 0);
+  }
+}
+/* mobilde şerit sola/sağa sabitlenir (translateX yok) — yalnız yükselme */
+@keyframes telemetry-rise-m {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 .telemetry-row {
@@ -436,21 +455,55 @@ a:hover {
   background: rgba(255, 154, 77, 0.3);
   border-radius: 99px;
 }
-/* sol kontrol paneli (ControlsPanel) */
-.controls {
+/* ── merkez dialoglar: toggle panelleri ekran ortasında açılır ── */
+.dialog-backdrop {
   position: fixed;
-  top: 54px;
-  left: 16px;
-  left: max(16px, env(safe-area-inset-left));
-  width: 248px;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  animation: backdrop-in 0.25s ease-out;
+}
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.dialog {
+  width: min(430px, 100%);
+  max-height: 100%;
+  max-height: min(80dvh, 680px);
+  display: flex;
+  flex-direction: column;
+  animation: dialog-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.dialog > .card {
+  max-height: 100%;
+}
+/* kontrol paneli dialog içeriği */
+.controls-dialog {
+  min-height: 0;
   padding: 12px 14px;
   font-size: 11px;
   user-select: none;
   -webkit-user-select: none;
-  /* kısa pencerede alttaki telemetri kartıyla çakışma: panel kayar
-     (dvh: iOS Safari adres çubuğu 100vh'yi şişirir) */
-  max-height: max(200px, calc(100vh - 400px));
-  max-height: max(200px, calc(100dvh - 400px));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -509,46 +562,29 @@ a:hover {
     top: max(10px, env(safe-area-inset-top));
     left: 12px;
   }
-  /* HUD logo satırının altına iner: tam genişlik, gerekirse yatay kayar */
+  /* HUD sağ üstte, logoyla aynı hizada (3 hücre dar ekrana sığar) */
   .hud {
-    top: calc(max(10px, env(safe-area-inset-top)) + 52px);
-    left: 12px;
+    top: max(8px, env(safe-area-inset-top));
     right: 12px;
-    justify-content: space-between;
     gap: 10px;
-    padding: 6px 12px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .hud::-webkit-scrollbar {
-    display: none;
+    padding: 6px 10px;
   }
   .hud .stat {
     min-width: 0;
-    flex: 1 0 auto;
-  }
-  .controls {
-    top: calc(max(10px, env(safe-area-inset-top)) + 108px);
-    left: 12px;
-    right: 12px;
-    width: auto;
-    max-height: max(180px, calc(100vh - 320px));
-    max-height: max(180px, calc(100dvh - 320px));
-    /* açıkken dock butonlarının üstünde durur */
-    z-index: 5;
   }
   .dock {
-    top: calc(max(10px, env(safe-area-inset-top)) + 108px);
-    left: 12px;
+    top: calc(max(10px, env(safe-area-inset-top)) + 52px);
     right: 12px;
-    width: auto;
-    /* alt-orta telemetri şeridine yer bırakılır (şerit ~185px) */
-    bottom: calc(190px + env(safe-area-inset-bottom));
   }
   .telemetry {
+    /* sol alttaki köşe araçlarına yer bırakılır */
+    left: 64px;
+    right: 12px;
+    transform: none;
+    max-width: none;
     bottom: calc(10px + env(safe-area-inset-bottom));
     padding: 8px 12px 10px;
-    max-width: calc(100vw - 20px);
+    animation-name: telemetry-rise-m;
   }
   .telemetry .stat {
     min-width: 64px;

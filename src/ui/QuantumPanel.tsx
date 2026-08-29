@@ -77,7 +77,7 @@ export function QuantumPanel({ onClose }: { onClose: () => void }) {
     g.setLineDash([])
   }, [])
   return (
-    <div className="card panel" style={{ flexShrink: 0 }}>
+    <div className="card panel">
       <div className="panel-head-row">
         <span className="panel-title">KUANTUM ETKİLERİ</span>
         <button onClick={onClose}>KAPAT ×</button>
