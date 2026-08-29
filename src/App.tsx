@@ -22,7 +22,11 @@ export default function App() {
   const coarsePointer = useMedia('(pointer: coarse)')
   // deps boş: simülasyon bir kez kurulur, kuruluştaki işaretçi türü kullanılır
   const { controller, governor } = useMemo(() => {
-    const governor = new QualityGovernor(window.devicePixelRatio, coarsePointer)
+    // ?kalite=yuksek|orta|dusuk|mobil → governor sabitlenir (test/ölçüm aracı)
+    const ASCII: Record<string, string> = { yuksek: 'yüksek', dusuk: 'düşük' }
+    const q = new URLSearchParams(window.location.search).get('kalite')
+    const pin = q ? (ASCII[q] ?? q) : undefined
+    const governor = new QualityGovernor(window.devicePixelRatio, coarsePointer, pin)
     const initial = PRESETS[DEFAULT_PRESET_ID]
     const sim = new Simulation(initial.engine, BODY_REGISTRY, initial.profile)
     const controller = new LabController(sim, governor, BODY_REGISTRY, PRESETS, DEFAULT_PRESET_ID)
