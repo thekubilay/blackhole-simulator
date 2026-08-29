@@ -18,16 +18,20 @@ export function FrameLoopDriver() {
     const tick = () => {
       if (disposed) return
       const now = performance.now()
+      // KRİTİK: R3F frameloop="never"da useFrame delta'sını buradaki zaman
+      // damgasının HAM FARKINDAN türetir (birim çevirmez). Milisaniye verilirse
+      // delta ms olur: FPS 1/16.7≈0 gösterir ve governor sonsuza dek en düşük
+      // kademeye kilitlenir. Three sözleşmesi gereği SANİYE veriyoruz.
       if (document.hidden) {
         lastRender = now
-        advance(now)
+        advance(now / 1000)
         hiddenTimer = window.setTimeout(tick, HIDDEN_INTERVAL_MS)
         return
       }
       hiddenTimer = null
       if (now - lastRender >= FRAME_MIN_MS) {
         lastRender = now
-        advance(now)
+        advance(now / 1000)
       }
       raf = requestAnimationFrame(tick)
     }
