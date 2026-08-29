@@ -13,9 +13,16 @@ uniform int uSteps;
 uniform vec3 uCamPos;
 uniform mat4 uCamMat, uProjInv;
 // disk iç kenarı = aktif deliğin ISCO'su; uEff = ışıma verimi η = 1 − E_ISCO
-uniform float uDiskIn, uEff;
+// uRealism: 0 = sanatsal palet, 1 = fiziksel (g⁴ hüzmeleme + kara cisim rengi)
+uniform float uDiskIn, uEff, uRealism;
 #define R_OUT 13.5
-mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
+mat2 rot(float a){
+  // KRİTİK: açıyı 2π'ye sar — float32 sin/cos büyük argümanda hassasiyet
+  // kaybeder (özellikle Metal/ANGLE); sarılmazsa disk dokusu dakikalar
+  // içinde piksel-tutarsızlığından "sahte blur"a çözülür
+  a = mod(a, 6.28318530718);
+  float c=cos(a),s=sin(a);return mat2(c,-s,s,c);
+}
 float hash12(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f);
   float a=hash12(i),b=hash12(i+vec2(1,0)),c=hash12(i+vec2(0,1)),d=hash12(i+vec2(1,1));
@@ -35,7 +42,7 @@ vec3 stars(vec3 rd){
       vec2 off = vec2(hash12(id+3.7),hash12(id+9.3))-.5;
       float d = length(gv-off*.7);
       float s = smoothstep(.14,.0,d)*(h-.915)/.085;
-      float tw = .75+.25*sin(uTime*(1.+h*2.)+h*40.);
+      float tw = .75+.25*sin(mod(uTime*(1.+h*2.)+h*40., 6.28318530718));
       col += vec3(1.,.96,.9)*s*s*1.4*tw;
     }
   }
@@ -46,6 +53,11 @@ vec3 diskRamp(float rr){
   // referans görüntü paleti: akkor beyaz-altın çekirdek → altın → tozlu turuncu
   vec3 hot=vec3(1.25,1.08,.92), mid=vec3(1.05,.52,.15), cool=vec3(.32,.08,.025);
   return mix(hot, mix(mid,cool,smoothstep(.12,.8,t)), smoothstep(0.,.22,t));
+}
+// kara cisim yaklaşığı: x = göreli sıcaklık (kayma dahil) → kızıl → beyaz → mavi-beyaz
+vec3 bbRamp(float x){
+  vec3 cold = vec3(1.0,.22,.04), mid = vec3(1.0,.88,.72), hot = vec3(.62,.76,1.35);
+  return x < 1.0 ? mix(cold, mid, smoothstep(.12,1.,x)) : mix(mid, hot, smoothstep(1.,1.9,x));
 }
 void sampleDisk(vec3 hp, vec3 vn, inout vec4 acc){
   float rr = length(hp.xz);
@@ -70,14 +82,26 @@ void sampleDisk(vec3 hp, vec3 vn, inout vec4 acc){
   float beta = clamp(sqrt(0.5/max(rr,1.4)), 0., 0.62);
   float gamma = 1./sqrt(1.-beta*beta);
   float dop = 1./(gamma*(1.+beta*dot(td,vn)));
-  // I ∝ δ^(3+α), α≈0.6 spektral indis — ayrık yayıcı geometrisi
-  // (Urry & Padovani); sürekli jetlerde üs 2+α olurdu
-  E *= pow(dop, 3.6);
-  E *= sqrt(max(1.-1./rr, 0.05));
-  vec3 c = diskRamp(rr);
-  c = mix(c, vec3(1.08,1.02,.95), clamp(uEff*1.6*pow(uDiskIn/rr, 2.0), 0., .5));
-  c = mix(c, vec3(1.02,.99,.96), clamp((dop-1.)*.9,0.,.65));
-  c = mix(c, c*vec3(1.,.42,.26), clamp((1.-dop)*1.4,0.,.85));
+  float gfac = sqrt(max(1.-1./rr, 0.03));   // kütleçekimsel kayma √(1−rs/r)
+  float shift = dop * gfac;                 // toplam g = ν_gözlenen/ν_yayılan
+  // Sanatsal: δ^(3.6)·√f (mevcut görünüm). Gerçekçi: bolometrik I ∝ g⁴ —
+  // yaklaşan taraf kat kat parlak, iç kenar kütleçekimsel kaymayla SÖNÜK
+  // gerçekçi pozlama düşük tutulur: yoksa her iki yan da ton eşlemede beyaza
+  // kırpılır ve g⁴'ün ~20× asimetrisi görünmez olur (Luminet 1979 kontrastı)
+  float boostA = pow(dop, 3.6) * gfac;
+  // 2.35/uDiskIn: pozlama deliğe normalize (uç spinde ISCO'ya bağlı emisyon
+  // profili tüm kareyi karartmasın) — fizik değil, kamera pozlaması
+  float boostR = 0.16 * (2.35/uDiskIn) * pow(shift, 4.0);
+  E *= mix(boostA, boostR, uRealism);
+  // Sanatsal renk: altın palet + belirgin Doppler mavi/kızıl ayrımı
+  vec3 cA = diskRamp(rr);
+  cA = mix(cA, vec3(1.08,1.02,.95), clamp(uEff*1.6*pow(uDiskIn/rr, 2.0), 0., .5));
+  cA = mix(cA, vec3(.98,1.0,1.08), clamp((dop-1.)*1.1,0.,.75));
+  cA = mix(cA, cA*vec3(1.,.40,.24), clamp((1.-dop)*1.5,0.,.9));
+  // Gerçekçi renk: Shakura–Sunyaev T ∝ r^(−3/4), gözlenen sıcaklık g ile kayar —
+  // disk mavi-beyaz, yaklaşan taraf maviye, uzaklaşan/iç bölge kızıla
+  float tRel = 1.35 * pow(uDiskIn/max(rr,uDiskIn), 0.75) * shift;
+  vec3 c = mix(cA, bbRamp(tRel), uRealism);
   float a = clamp(E*.55,0.,.95);
   acc.rgb += (1.-acc.a)*c*E;
   acc.a  += (1.-acc.a)*a*.7;
@@ -101,7 +125,8 @@ void main(){
         if(rr>uDiskIn && rr<R_OUT) sampleDisk(hp, v, acc);
       }
     }
-    vec3 cf = acc.rgb + (1.-acc.a)*stars(v);
+    // pozlama ödünü: gerçekçi modda disk parlaklığı yıldızları bastırır
+    vec3 cf = acc.rgb + (1.-acc.a)*stars(v)*mix(1.0, 0.12, uRealism);
     cf = aces(cf); cf = pow(cf, vec3(0.4545));
     cf += (hash12(gl_FragCoord.xy*.73)-.5)*0.012;
     float vf = 1.-0.32*pow(length(ndc*vec2(1.,.8)),2.6);
@@ -127,12 +152,16 @@ void main(){
     }
     if(acc.a > 0.99) break;
   }
-  vec3 bg = captured ? vec3(0.) : stars(normalize(v));
+  vec3 bg = captured ? vec3(0.) : stars(normalize(v))*mix(1.0, 0.12, uRealism);
   vec3 col = acc.rgb + (1.-acc.a)*bg;
   if(!captured){
-    col += vec3(1.,.5,.24)*0.30*exp(-pow((minR-2.75)*1.15,2.));
-    // foton halkası: foton küresini (1.5 rs) sıyıran ışınların ince akkor çizgisi
-    col += vec3(1.05,.92,.75)*0.5*exp(-pow((minR-1.55)*5.5,2.));
+    // bu iki terim KOZMETİKTİR (sanatsal halo) — gerçekçi modda bastırılır:
+    // gerçek foton halkası ışın izlemedeki disk örneklerinden kendiliğinden
+    // oluşur; yapay geniş parlama "sahte blur" gibi durur
+    col += mix(vec3(1.,.5,.24), vec3(.75,.85,1.15), uRealism)
+         * mix(0.30, 0.03, uRealism) * exp(-pow((minR-2.75)*1.15,2.));
+    col += mix(vec3(1.05,.92,.75), vec3(.9,.95,1.2), uRealism)
+         * mix(0.5, 0.10, uRealism) * exp(-pow((minR-1.55)*mix(5.5, 9.0, uRealism),2.));
   }
   col = aces(col);
   col = pow(col, vec3(0.4545));
@@ -151,6 +180,7 @@ export type LensUniforms = {
   uSteps: THREE.IUniform<number>
   uDiskIn: THREE.IUniform<number>
   uEff: THREE.IUniform<number>
+  uRealism: THREE.IUniform<number>
 }
 
 export function createLensUniforms(): LensUniforms {
@@ -163,5 +193,6 @@ export function createLensUniforms(): LensUniforms {
     uSteps: { value: 150 },
     uDiskIn: { value: 2.35 },
     uEff: { value: 0.06 },
+    uRealism: { value: 0 },
   }
 }

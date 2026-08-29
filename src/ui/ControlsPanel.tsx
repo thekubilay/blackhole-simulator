@@ -34,6 +34,15 @@ export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) 
           </button>
         ))}
       </div>
+      <div className="lbl">GÖRÜNÜM</div>
+      <div className="seg">
+        <button className={s.realistic ? '' : 'on'} onClick={() => lab.setRealistic(false)}>
+          Sanatsal
+        </button>
+        <button className={s.realistic ? 'on' : ''} onClick={() => lab.setRealistic(true)}>
+          Gerçekçi (g⁴)
+        </button>
+      </div>
       <div className="lbl">NESNE</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
         {Object.entries(BODY_REGISTRY).map(([type, def]) => (

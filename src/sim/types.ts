@@ -58,6 +58,8 @@ export interface LabSnapshot {
   hint: string
   busy: boolean
   hole: HoleInfo
+  /** görsel mod: true = fiziksel (g⁴ hüzmeleme, kara cisim renkleri) */
+  realistic: boolean
 }
 
 /** ISP: UI'nin komut tarafı — durum okumadan ayrı. */
@@ -69,6 +71,8 @@ export interface LabCommands {
   clear(): void
   /** aktif kara delik preset'ini değiştir (sahneyi temizler) */
   setHole(id: string): void
+  /** görsel mod: sanatsal palet ↔ fiziksel (g⁴ + kara cisim) */
+  setRealistic(on: boolean): void
 }
 
 /** ISP: UI'nin okuma tarafı — useSyncExternalStore sözleşmesi. */
