@@ -12,6 +12,23 @@ import { Dialog } from './Dialog'
 
 type Tab = 'genel' | 'fizik' | 'kuantum'
 
+/**
+ * Duruma göre koçluk satırı — "W'ye basınca ne oluyor, şimdi ne yapmalıyım"
+ * sorusunun oyun içi cevabı. Yörünge fiziğinin tersliği anlatılmadan oynanamıyor
+ * (playtest bulgusu): derin = açısal hızlı, W = gecikmeli tırmanış.
+ */
+function coachLine(h: { sep: number; closure: number; podR: number; endR: number }): string {
+  const dr = h.podR - h.endR
+  if (dr > 0.35) return 'Endurance ÜSTÜNE çıktın — S ile alçal, salınıma izin verme'
+  if (dr < -0.35 && h.sep > 3)
+    return 'Altındasın = ondan hızlı dönüyorsun; süzül, ara kendiliğinden kapanıyor (erken tırmanma)'
+  if (dr < -0.35) return 'Ara kapandı — W ile DOZLU tırman (yanıt gecikmelidir), yüksekliğini onunkine getir'
+  if (h.sep > 1.2) return 'Hizadasın — küçük dokunuşlarla yaklaşmayı koru'
+  return h.closure > 0.008
+    ? 'ÇOK HIZLI YAKLAŞIYORSUN — W ile frene bas (limit 0.008c)'
+    : 'Son yaklaşma — kapanmayı 0.008c altında tut, dokunuşlar minik olsun'
+}
+
 export function Overlay({ controller, game }: { controller: LabController; game: GameController }) {
   const s = useLabSnapshot(controller)
   const g = useGameSnapshot(game)
@@ -61,7 +78,9 @@ export function Overlay({ controller, game }: { controller: LabController; game:
             </div>
             <div className="gstat">
               <span>SEN r</span>
-              <b className={h.podR < h.isco * 1.15 ? 'g-warn' : ''}>{h.podR.toFixed(1)}</b>
+              <b className={h.podR < h.isco * 1.15 ? 'g-warn' : h.vr > 0.01 ? 'g-ok' : ''}>
+                {h.podR.toFixed(1)} {h.vr > 0.01 ? '↑' : h.vr < -0.01 ? '↓' : '·'}
+              </b>
             </div>
             <div className="gstat">
               <span>END r</span>
@@ -71,11 +90,17 @@ export function Overlay({ controller, game }: { controller: LabController; game:
               <span>ISCO</span>
               <b>{h.isco.toFixed(1)}</b>
             </div>
+            <div className="gstat">
+              <span>İTKİ</span>
+              <b className={h.thrust !== 0 ? 'g-ok' : ''}>
+                {h.thrust > 0 ? '▲ W' : h.thrust < 0 ? '▼ S' : '—'}
+              </b>
+            </div>
           </div>
         )}
-        {g.phase === 'flying' && (
+        {h && g.phase === 'flying' && (
           <div className="game-note">
-            Akıntıdasın — W/↑ tırman · S/↓ dal (derin uçuş faz kazandırır, tırmanış yakıt ister) · R yeniden başlat
+            {coachLine(h)} · R yeniden başlat
           </div>
         )}
         {(g.phase === 'docked' || g.phase === 'failed') && (

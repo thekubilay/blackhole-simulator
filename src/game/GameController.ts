@@ -28,6 +28,8 @@ export interface GameHud {
   isco: number
   /** anlık itki girişi (−1 retro, 0 boş, +1 prograd) — HUD geri bildirimi */
   thrust: number
+  /** düşey eğilim: r₊/gerçek saniye, + yükseliyor (EMA yumuşatılmış) */
+  vr: number
 }
 
 export interface GameSnapshot {
@@ -62,6 +64,8 @@ export class GameController {
   private thrustInput: -1 | 0 | 1 = 0
   private readonly held = new Set<string>()
   private emitAcc = 0
+  private lastPodR: number | null = null
+  private vrEma = 0
   private snap: GameSnapshot = { active: false, phase: 'idle', reason: null, hud: null }
   private readonly subs = new Set<() => void>()
   private readonly tmpT = new THREE.Vector3()
@@ -118,6 +122,12 @@ export class GameController {
     }
     this.emitAcc += delta
     if (this.emitAcc >= 0.1) {
+      // düşey eğilim: "W'ye bastım, ne oldu?" sorusunun cevabı HUD'da yaşasın
+      if (this.pod) {
+        const rate = this.lastPodR == null ? 0 : (this.pod.st.r - this.lastPodR) / this.emitAcc
+        this.vrEma += (rate - this.vrEma) * 0.35
+        this.lastPodR = this.pod.st.r
+      }
       this.emitAcc = 0
       this.publish()
     }
@@ -165,6 +175,8 @@ export class GameController {
     this.endurance.dragMul = 0.08
     this.pod.dragMul = 0.16 // 0.55 denendi: 18 sn'de ISCO — deneme şansı yok
     this.fuel = FUEL_DV
+    this.lastPodR = null
+    this.vrEma = 0
     this.phase = 'flying'
     this.reason = null
     this.publish()
@@ -265,6 +277,7 @@ export class GameController {
         endR: end.st.r,
         isco: this.engine.isco,
         thrust: this.thrustInput,
+        vr: this.vrEma,
       }
     }
     this.snap = {
