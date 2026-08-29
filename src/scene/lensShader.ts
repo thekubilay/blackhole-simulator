@@ -16,7 +16,13 @@ uniform mat4 uCamMat, uProjInv;
 // uRealism: 0 = sanatsal palet, 1 = fiziksel (g⁴ hüzmeleme + kara cisim rengi)
 uniform float uDiskIn, uEff, uRealism;
 #define R_OUT 13.5
-mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
+mat2 rot(float a){
+  // KRİTİK: açıyı 2π'ye sar — float32 sin/cos büyük argümanda hassasiyet
+  // kaybeder (özellikle Metal/ANGLE); sarılmazsa disk dokusu dakikalar
+  // içinde piksel-tutarsızlığından "sahte blur"a çözülür
+  a = mod(a, 6.28318530718);
+  float c=cos(a),s=sin(a);return mat2(c,-s,s,c);
+}
 float hash12(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f);
   float a=hash12(i),b=hash12(i+vec2(1,0)),c=hash12(i+vec2(0,1)),d=hash12(i+vec2(1,1));
@@ -36,7 +42,7 @@ vec3 stars(vec3 rd){
       vec2 off = vec2(hash12(id+3.7),hash12(id+9.3))-.5;
       float d = length(gv-off*.7);
       float s = smoothstep(.14,.0,d)*(h-.915)/.085;
-      float tw = .75+.25*sin(uTime*(1.+h*2.)+h*40.);
+      float tw = .75+.25*sin(mod(uTime*(1.+h*2.)+h*40., 6.28318530718));
       col += vec3(1.,.96,.9)*s*s*1.4*tw;
     }
   }
@@ -149,9 +155,13 @@ void main(){
   vec3 bg = captured ? vec3(0.) : stars(normalize(v))*mix(1.0, 0.12, uRealism);
   vec3 col = acc.rgb + (1.-acc.a)*bg;
   if(!captured){
-    col += mix(vec3(1.,.5,.24), vec3(.75,.85,1.15), uRealism)*0.30*exp(-pow((minR-2.75)*1.15,2.));
-    // foton halkası: foton küresini (1.5 rs) sıyıran ışınların ince akkor çizgisi
-    col += mix(vec3(1.05,.92,.75), vec3(.9,.95,1.2), uRealism)*0.5*exp(-pow((minR-1.55)*5.5,2.));
+    // bu iki terim KOZMETİKTİR (sanatsal halo) — gerçekçi modda bastırılır:
+    // gerçek foton halkası ışın izlemedeki disk örneklerinden kendiliğinden
+    // oluşur; yapay geniş parlama "sahte blur" gibi durur
+    col += mix(vec3(1.,.5,.24), vec3(.75,.85,1.15), uRealism)
+         * mix(0.30, 0.03, uRealism) * exp(-pow((minR-2.75)*1.15,2.));
+    col += mix(vec3(1.05,.92,.75), vec3(.9,.95,1.2), uRealism)
+         * mix(0.5, 0.10, uRealism) * exp(-pow((minR-1.55)*mix(5.5, 9.0, uRealism),2.));
   }
   col = aces(col);
   col = pow(col, vec3(0.4545));
