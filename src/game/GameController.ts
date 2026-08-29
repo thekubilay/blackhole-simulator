@@ -12,7 +12,7 @@ import type { SimObject } from '../sim/Simulation'
  * Presesyon, çerçeve sürüklemesi, disk sürtünmesi (Endurance'ın bozunan
  * yörüngesi dahil) motordan kendiliğinden gelir.
  */
-export type GamePhase = 'idle' | 'flying' | 'docked' | 'failed'
+export type GamePhase = 'idle' | 'flying' | 'dying' | 'docked' | 'failed'
 
 export interface GameHud {
   /** pod–Endurance ayrımı (r₊) */
@@ -32,13 +32,28 @@ export interface GameHud {
   vr: number
 }
 
+/** Son ekranı istatistikleri — "az kalmıştı" hissinin motoru. */
+export interface GameStats {
+  /** koşu süresi (gerçek saniye) */
+  runT: number
+  /** Endurance'a en yakın geçiş (r₊) */
+  minSep: number
+  /** kalan yakıt 0..1 */
+  fuel: number
+  /** temas hızı (c) — yalnız kenetlenme/çarpışmada */
+  contact: number | null
+}
+
 export interface GameSnapshot {
   active: boolean
   /** brifing ekranı açık: ilk girişte ve oyun içinde ESC/✕ ile (sim duraklar) */
   briefing: boolean
   phase: GamePhase
+  /** son ekranı büyük başlığı (ör. DÖNÜŞÜ OLMAYAN NOKTA) */
+  title: string | null
   /** ölüm/başarı tek satırı — her son okunabilir olmalı */
   reason: string | null
+  stats: GameStats | null
   hud: GameHud | null
 }
 
@@ -63,14 +78,27 @@ export class GameController {
   private active = false
   private briefing = false
   private phase: GamePhase = 'idle'
+  private title: string | null = null
   private reason: string | null = null
+  private stats: GameStats | null = null
+  private runT = 0
+  private minSep = Infinity
   private fuel = 0
   private thrustInput: -1 | 0 | 1 = 0
   private readonly held = new Set<string>()
   private emitAcc = 0
+  private dyingT = 0
   private lastPodR: number | null = null
   private vrEma = 0
-  private snap: GameSnapshot = { active: false, briefing: false, phase: 'idle', reason: null, hud: null }
+  private snap: GameSnapshot = {
+    active: false,
+    briefing: false,
+    phase: 'idle',
+    title: null,
+    reason: null,
+    stats: null,
+    hud: null,
+  }
   private readonly subs = new Set<() => void>()
   private readonly tmpT = new THREE.Vector3()
   private readonly tmpV = new THREE.Vector3()
@@ -130,7 +158,9 @@ export class GameController {
     this.active = false
     this.briefing = false
     this.phase = 'idle'
+    this.title = null
     this.reason = null
+    this.stats = null
     this.lab.rewind() // duraklatmayı da sıfırlar
     this.publish()
   }
@@ -145,8 +175,18 @@ export class GameController {
   tick(delta: number): void {
     if (!this.active || this.briefing) return
     if (this.phase === 'flying') {
+      this.runT += delta
       if (this.thrustInput !== 0 && this.fuel > 0) this.applyThrust(this.thrustInput, delta)
       this.evaluate()
+    } else if (this.phase === 'dying') {
+      // ISCO plonjonu: sim akar, kamera delik merkezine kilitli — gölge ekranı
+      // yutunca (ya da en geç 7 sn'de) donmuş simsiyah son + tek satır sebep
+      this.dyingT += delta
+      const r = this.pod?.st.r ?? 0
+      if (r < Math.max(1.05, this.engine.isco * 0.75) || this.dyingT > 7) {
+        this.phase = 'failed'
+        this.setPaused(true)
+      }
     }
     this.emitAcc += delta
     if (this.emitAcc >= 0.1) {
@@ -211,8 +251,12 @@ export class GameController {
     this.fuel = FUEL_DV
     this.lastPodR = null
     this.vrEma = 0
+    this.runT = 0
+    this.minSep = Infinity
     this.phase = 'flying'
+    this.title = null
     this.reason = null
+    this.stats = null
     this.publish()
   }
 
@@ -247,25 +291,66 @@ export class GameController {
     const end = this.endurance
     if (!pod || !end) return
     const isco = this.engine.isco
-    if (!pod.alive) return this.finish('failed', 'Ufkun ardında kayboldun — sinyal kesildi.')
+    if (!pod.alive) return this.startDying('SİNYAL KESİLDİ', 'Ufkun ardında kayboldun.')
     if (pod.st.r <= isco)
-      return this.finish('failed', `ISCO'nun altına düştün (r = ${pod.st.r.toFixed(2)} r₊) — dönüş yok.`)
+      return this.startDying(
+        'DÖNÜŞÜ OLMAYAN NOKTA',
+        `ISCO'nun altına düştün (r = ${pod.st.r.toFixed(2)} r₊) — artık hiçbir itki yetmez.`,
+      )
     if (!end.alive || end.st.r <= isco)
-      return this.finish('failed', "Endurance ISCO'ya düştü — çok geç kaldın.")
+      return this.finish('failed', 'ÇOK GEÇ', "Endurance ISCO'ya düştü — kurtarılacak kimse kalmadı.")
     if (pod.st.r > LOST_R)
-      return this.finish('failed', `Diskten savruldun (r = ${pod.st.r.toFixed(1)} r₊) — Endurance geride kaldı.`)
+      return this.finish(
+        'failed',
+        'DİSKTEN SAVRULDUN',
+        `r = ${pod.st.r.toFixed(1)} r₊ — Endurance çok geride kaldı, dönecek yakıtın yok.`,
+      )
     const sep = pod.pos.distanceTo(end.pos)
+    if (sep < this.minSep) this.minSep = sep
     const rel = this.tmpV.copy(pod.vel).sub(end.vel).length()
     if (sep < DOCK_DIST) {
       if (rel <= DOCK_SPEED)
-        return this.finish('docked', `KENETLENDİN — temas hızı ${rel.toFixed(3)} c. Cooper gurur duyardı.`)
-      return this.finish('failed', `Çarptın — temas hızı ${rel.toFixed(3)} c (limit ${DOCK_SPEED} c).`)
+        return this.finish(
+          'docked',
+          'KENETLENME BAŞARILI',
+          `Temas hızı ${rel.toFixed(3)}c — Cooper gurur duyardı.`,
+          rel,
+        )
+      return this.finish(
+        'failed',
+        'ÇARPIŞMA',
+        `Temas hızı ${rel.toFixed(3)}c, limit 0.008c — gövde dayanmadı.`,
+        rel,
+      )
     }
   }
 
-  private finish(phase: 'docked' | 'failed', reason: string): void {
-    this.phase = phase
+  private buildStats(contact: number | null): GameStats {
+    return {
+      runT: this.runT,
+      minSep: this.minSep,
+      fuel: this.fuel / FUEL_DV,
+      contact,
+    }
+  }
+
+  /** ISCO plonjonuna geç: dünya DONMAZ — düşüş sineması tick'te sonlanır. */
+  private startDying(title: string, reason: string): void {
+    this.phase = 'dying'
+    this.dyingT = 0
+    this.title = title
     this.reason = reason
+    this.stats = this.buildStats(null)
+    this.thrustInput = 0
+    this.held.clear()
+    this.publish()
+  }
+
+  private finish(phase: 'docked' | 'failed', title: string, reason: string, contact: number | null = null): void {
+    this.phase = phase
+    this.title = title
+    this.reason = reason
+    this.stats = this.buildStats(contact)
     // dünya donar: son karesi + tek satır sebep — sahne dönmeye devam etmez
     this.setPaused(true)
     this.publish()
@@ -320,7 +405,9 @@ export class GameController {
       active: this.active,
       briefing: this.briefing,
       phase: this.phase,
+      title: this.title,
       reason: this.reason,
+      stats: this.stats,
       hud,
     }
     this.subs.forEach((fn) => fn())

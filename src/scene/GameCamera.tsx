@@ -12,6 +12,7 @@ import { useGameSnapshot } from '../hooks/useGameSnapshot'
 const CAM_H = 0.3
 const POV_FALLBACK = new THREE.Vector3(0, CAM_H, 9.5)
 const POV_TARGET = new THREE.Vector3(0, CAM_H, 0)
+const HOLE_CENTER = new THREE.Vector3(0, 0, 0)
 
 /**
  * Oyun modunda kamerayı devralır ve POV pozuna yumuşakça taşır. OrbitControls
@@ -19,7 +20,9 @@ const POV_TARGET = new THREE.Vector3(0, CAM_H, 0)
  * controls.reset() lab görünümünü geri getirir (CameraRewind ile aynı desen).
  */
 export function GameCamera({ game }: { game: GameController }) {
-  const active = useGameSnapshot(game).active
+  const snap = useGameSnapshot(game)
+  const active = snap.active
+  const phase = snap.phase
   const controls = useThree((s) => s.controls) as { reset?: () => void } | null
   const camera = useThree((s) => s.camera)
   const look = useRef(new THREE.Vector3())
@@ -39,9 +42,15 @@ export function GameCamera({ game }: { game: GameController }) {
 
   useFrame((_, delta) => {
     if (!active) return
-    // konum: pod'un üstü; bakış: Endurance — ikisi de yoksa park pozu
+    // oyun sonu: dünya donuk, kamera olduğu yerde kalır (son kare fotoğraf) —
+    // özellikle ISCO plonjonundan sonra bakış Endurance'a GERİ dönmemeli
+    if (phase === 'docked' || phase === 'failed') return
+    // konum: pod'un üstü; bakış: Endurance — ikisi de yoksa park pozu.
+    // Plonjonda ('dying') bakış DELİK MERKEZİNE kilitlenir: pod spiral atarken
+    // gölge merkezde büyür — "dönüyorum" değil "içine düşüyorum" okunur,
+    // ekran fiziksel olarak simsiyaha gider.
     const podPos = game.podPosition()
-    const endPos = game.endurancePosition()
+    const endPos = phase === 'dying' ? HOLE_CENTER : game.endurancePosition()
     if (podPos) target.current.set(podPos.x, podPos.y + CAM_H, podPos.z)
     else target.current.copy(POV_FALLBACK)
     // kare hızından bağımsız üstel yumuşatma. Bakış, konumdan daha sıkı:

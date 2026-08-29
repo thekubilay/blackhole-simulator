@@ -606,6 +606,21 @@ a:hover {
 .ui .brief-actions button {
   flex: 1;
 }
+/* klavye tuşu çipi: W / S / R */
+.ui .key {
+  display: inline-block;
+  padding: 0 7px;
+  border: 1px solid var(--amber-line-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: rgba(255, 154, 77, 0.1);
+  color: #ffd9b3;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1.7;
+  vertical-align: 1px;
+}
 /* kenetlenme HUD şeridi: üst-orta, altı değer hücresi */
 .ui .game-hud {
   position: fixed;
@@ -643,15 +658,50 @@ a:hover {
 .ui .g-warn {
   color: #ff8f6b !important;
 }
-/* oyun sonu tek satırı: merkez, tek sebep + tekrar ipucu */
+/* oyun sonu ekranı: büyük başlık + sebep + istatistik + butonlar */
 .ui .game-msg {
   position: fixed;
   left: 50%;
-  top: 42%;
+  top: 44%;
   transform: translate(-50%, -50%);
-  padding: 16px 22px;
+  padding: 24px 28px 20px;
   text-align: center;
-  max-width: min(480px, 86vw);
+  width: min(420px, 88vw);
+}
+.ui .end-title {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: 0.2em;
+  line-height: 1.25;
+}
+.ui .end-ok {
+  color: #8fd694;
+  text-shadow: 0 0 26px rgba(143, 214, 148, 0.35);
+}
+.ui .end-fail {
+  color: #ff8f6b;
+  text-shadow: 0 0 26px rgba(255, 143, 107, 0.3);
+}
+.ui .end-reason {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #dccdbd;
+}
+.ui .end-stats {
+  display: flex;
+  justify-content: center;
+  gap: 26px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--amber-line);
+}
+.ui .end-tease {
+  margin-top: 12px;
+  font-size: 10px;
+  font-style: italic;
+  color: #ffb877;
 }
 /* ── dokunmatik cihazlar: parmak hedefleri ─────────────────────── */
 @media (pointer: coarse) {

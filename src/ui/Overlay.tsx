@@ -80,17 +80,23 @@ export function Overlay({ controller, game }: { controller: LabController; game:
             <p>
               <b>Yörüngenin tersliği:</b> derindeki daha hızlı döner. Endurance'dan derinde olduğun için
               ondan hızlısın — beklersen ara <i>kendiliğinden</i> kapanır; acele edersen her şeyi bozarsın.
-              <b> W</b> ileri itki verir: seni dışarı savurur, <b>tırmanırsın</b> ama açısal olarak
-              yavaşlayıp fazda geri düşersin. <b>S</b> frendir: <b>dalarsın</b> ve daha da hızlanırsın.
-              İkisi de asansör değil — yarıçap saniyeler <i>sonra</i> tepki verir, fazla bastırırsan
-              yörüngen salınır (yükselip geri düşersin). SEN r hücresindeki ↑/↓ oku bu gecikmeyi gösterir.
+              <kbd className="key">W</kbd> ileri itki verir: seni dışarı savurur, <b>tırmanırsın</b> ama
+              açısal olarak yavaşlayıp fazda geri düşersin. <kbd className="key">S</kbd> frendir:{' '}
+              <b>dalarsın</b> ve daha da hızlanırsın. İkisi de asansör değil — yarıçap saniyeler{' '}
+              <i>sonra</i> tepki verir, fazla bastırırsan yörüngen salınır (yükselip geri düşersin).
+              SEN r hücresindeki ↑/↓ oku bu gecikmeyi gösterir.
             </p>
             <p>
-              <b>Plan:</b> ① Süzül — ara kapanırken yüksekliğini koru, yakıt harcama. ② Ara 2-3 r₊'ye
-              inince W ile <b>dozlu</b> tırman; hedefe vardığında onun yüksekliğinde ol. ③ Son yaklaşmada
-              kapanma hızını <b>0.008c</b> altına indirip dokun — hızlı temas çarpışmadır. Yakıt sınırlı:
-              her itki bir karar. Alttaki satır sana o an ne yapman gerektiğini fısıldar;
-              <b> R</b> her an yeniden başlatır.
+              <b>Plan:</b>
+              <br />① Süzül — ara kapanırken yüksekliğini koru, yakıt harcama.
+              <br />② Ara 2-3 r₊'ye inince <kbd className="key">W</kbd> ile <b>dozlu</b> tırman; hedefe
+              vardığında onun yüksekliğinde ol.
+              <br />③ Son yaklaşmada kapanma hızını <b>0.008c</b> altına indirip dokun — hızlı temas
+              çarpışmadır.
+            </p>
+            <p>
+              Yakıt sınırlı: her itki bir karar. Alttaki satır sana o an ne yapman gerektiğini fısıldar;{' '}
+              <kbd className="key">R</kbd> her an yeniden başlatır.
             </p>
             <div className="brief-actions">
               <button className="on" onClick={() => game.begin()}>
@@ -146,11 +152,41 @@ export function Overlay({ controller, game }: { controller: LabController; game:
         )}
         {!g.briefing && (g.phase === 'docked' || g.phase === 'failed') && (
           <div className="game-msg card">
-            <div className={g.phase === 'docked' ? 'g-ok' : 'g-warn'} style={{ fontSize: 13 }}>
-              {g.reason}
-            </div>
-            <div style={{ marginTop: 8, color: 'var(--ink-muted)', fontSize: 10 }}>
-              R — yeniden dene · ESC — lab'a dön
+            <div className={`end-title ${g.phase === 'docked' ? 'end-ok' : 'end-fail'}`}>{g.title}</div>
+            <div className="end-reason">{g.reason}</div>
+            {g.stats && (
+              <div className="end-stats">
+                <div className="gstat">
+                  <span>SÜRE</span>
+                  <b>{Math.round(g.stats.runT)} sn</b>
+                </div>
+                {g.stats.contact != null ? (
+                  <div className="gstat">
+                    <span>TEMAS HIZI</span>
+                    <b>{g.stats.contact.toFixed(3)} c</b>
+                  </div>
+                ) : (
+                  <div className="gstat">
+                    <span>EN YAKIN</span>
+                    <b>{Number.isFinite(g.stats.minSep) ? `${g.stats.minSep.toFixed(2)} r₊` : '—'}</b>
+                  </div>
+                )}
+                <div className="gstat">
+                  <span>KALAN YAKIT</span>
+                  <b>%{Math.round(g.stats.fuel * 100)}</b>
+                </div>
+              </div>
+            )}
+            {g.phase === 'failed' && g.stats && Number.isFinite(g.stats.minSep) && g.stats.minSep < 1.5 && (
+              <div className="end-tease">{g.stats.minSep.toFixed(2)} r₊'ye kadar yaklaşmıştın — az kalmıştı.</div>
+            )}
+            <div className="brief-actions">
+              <button className="on" onClick={() => game.restart()}>
+                YENİDEN DENE&nbsp;<kbd className="key">R</kbd>
+              </button>
+              <button onClick={() => game.exit()}>
+                LAB'A DÖN&nbsp;<kbd className="key">ESC</kbd>
+              </button>
             </div>
           </div>
         )}
