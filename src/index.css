@@ -565,17 +565,6 @@ a:hover {
   pointer-events: auto;
   z-index: 3;
 }
-/* oyun POV'u: kokpit konsolu — DOM sırası gereği HUD ve kartların altında */
-.cockpit {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-}
-.cockpit svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
 /* koçluk satırı: üst-orta HUD kartının hemen altında */
 .ui .game-note {
   position: fixed;

@@ -9,6 +9,7 @@ import { QualityGovernor } from './sim/QualityGovernor'
 import { LabController } from './sim/LabController'
 import { GameController } from './game/GameController'
 import { CameraRewind } from './scene/CameraRewind'
+import { CockpitRig } from './scene/CockpitRig'
 import { GameCamera } from './scene/GameCamera'
 import { GameLoop } from './scene/GameLoop'
 import { FrameLoopDriver } from './scene/FrameLoopDriver'
@@ -65,6 +66,9 @@ export default function App() {
         <CameraRewind controller={controller} />
         <GameLoop game={game} />
         <GameCamera game={game} />
+        {/* GameCamera'dan SONRA mount: aynı frame priority'sinde sıra mount
+            sırasıdır — kokpit poz senkronu kamera yerleştikten sonra çalışır */}
+        <CockpitRig game={game} />
         <LensedBackground controller={controller} governor={governor} />
         <HorizonOccluders />
         <Lights />

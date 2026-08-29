@@ -9,7 +9,6 @@ import { TelemetryPanel } from './TelemetryPanel'
 import { PhysicsPanel } from './PhysicsPanel'
 import { QuantumPanel } from './QuantumPanel'
 import { Dialog } from './Dialog'
-import { Cockpit } from './Cockpit'
 
 type Tab = 'genel' | 'fizik' | 'kuantum'
 
@@ -51,7 +50,6 @@ export function Overlay({ controller, game }: { controller: LabController; game:
     // oyun görünümü: lab UI'si çekilir — marka + çıkış + kenetlenme HUD'u
     return (
       <div className="ui">
-        <Cockpit />
         <div className="brand">
           <div className="title">
             KARA DELİK <span className="thin">LAB.</span>
