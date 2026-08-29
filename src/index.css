@@ -263,6 +263,18 @@ a:hover {
   text-align: center;
   min-width: 60px;
 }
+/* HUD hücreleri tıklanabilir: buton kromu sıfır, stat görünümü korunur */
+.ui .hud .stat-btn {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  padding: 2px 6px;
+  min-height: 0;
+  box-shadow: none;
+}
+.ui .hud .stat-btn:hover {
+  background: rgba(255, 154, 77, 0.1);
+}
 .stat-k {
   font-family: var(--font-display);
   font-weight: 300;

@@ -1,4 +1,5 @@
 import type * as THREE from 'three'
+import type { QualityLevel } from './QualityGovernor'
 
 export type SpawnMode = 'orbit' | 'flyby' | 'fall'
 
@@ -50,6 +51,8 @@ export interface HoleInfo {
 export interface LabSnapshot {
   fps: number
   quality: string
+  /** true = kalite FPS'e göre adaptif; false = elle/URL ile sabit */
+  qualityAuto: boolean
   armed: string | null
   mode: SpawnMode
   paused: boolean
@@ -77,6 +80,10 @@ export interface LabCommands {
   setRealistic(on: boolean): void
   /** tam sıfırlama: nesneler + duraklatma + zaman hızı + kamera başa döner */
   rewind(): void
+  /** kalite seviyesini elle seç; null = otomatik adaptasyona dön */
+  setQuality(label: string | null): void
+  /** bu cihazda kullanılabilir kalite seviyeleri (HUD kalite menüsü) */
+  qualityOptions(): readonly QualityLevel[]
 }
 
 /** ISP: UI'nin okuma tarafı — useSyncExternalStore sözleşmesi. */

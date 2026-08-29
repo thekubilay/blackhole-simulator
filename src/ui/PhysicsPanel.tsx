@@ -1,11 +1,7 @@
-export function PhysicsPanel({ onClose }: { onClose: () => void }) {
+/** FİZİK sekmesinin içeriği — dialog kabuğunu Overlay sahiplenir. */
+export function PhysicsPanel() {
   return (
-    <div className="card panel">
-      <div className="panel-head-row">
-        <span className="panel-title">BİLİMSEL SPESİFİKASYON</span>
-        <button onClick={onClose}>KAPAT ×</button>
-      </div>
-      <div className="panel-body">
+    <>
       <div className="sect">● UZAY-ZAMAN</div>
       <div className="body">
         Geometri: dönmeyen, yüksüz <b>Schwarzschild</b> karadeliği. Uzunluk birimi olay ufku yarıçapıdır. Cisim
@@ -97,7 +93,6 @@ export function PhysicsPanel({ onClose }: { onClose: () => void }) {
         çizilir, dithering bantlaşmayı siler. 60 fps sınırı ve gizli sekmede 10 fps ile GPU uzun oturumda serin
         kalır; silinen her cismin geometri/doku belleği anında boşaltılır.
       </div>
-      </div>
-    </div>
+    </>
   )
 }

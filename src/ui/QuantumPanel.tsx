@@ -11,15 +11,17 @@ function Row({ k, v }: { k: string; v: string }) {
   )
 }
 
-export function QuantumPanel({ onClose }: { onClose: () => void }) {
+/** KUANTUM sekmesinin içeriği — dialog kabuğunu Overlay sahiplenir. */
+export function QuantumPanel() {
   const cv = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const c = cv.current
     if (!c) return
     const g = c.getContext('2d')
     if (!g) return
-    const W = (c.width = 380)
-    const H = (c.height = 200)
+    // 620px'lik dialogda net kalsın diye tuval genişletildi
+    const W = (c.width = 560)
+    const H = (c.height = 240)
     g.clearRect(0, 0, W, H)
     const px = 44
     const py = 10
@@ -77,12 +79,7 @@ export function QuantumPanel({ onClose }: { onClose: () => void }) {
     g.setLineDash([])
   }, [])
   return (
-    <div className="card panel">
-      <div className="panel-head-row">
-        <span className="panel-title">KUANTUM ETKİLERİ</span>
-        <button onClick={onClose}>KAPAT ×</button>
-      </div>
-      <div className="panel-body">
+    <>
       <Row k="UFUK ALANI" v={exp2(Q.A) + ' m²'} />
       <Row k="ENTROPİ S/k_B" v={exp2(Q.S)} />
       <Row k="T_H (Hawking)" v={exp2(Q.TH) + ' K'} />
@@ -98,7 +95,6 @@ export function QuantumPanel({ onClose }: { onClose: () => void }) {
         HAWKING IŞIMASI · TEMSİLİ · TAYF: HAWKING 1974/75 · TEPE {exp2(Q.peak)} HZ
         <br />S = A c³ / 4Għ &nbsp;·&nbsp; T_H = ħc³ / 8πGMk_B &nbsp;·&nbsp; t = 5120πG²M³ / ħc⁴
       </div>
-      </div>
-    </div>
+    </>
   )
 }

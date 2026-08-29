@@ -10,7 +10,7 @@ import type {
   SpawnMode,
 } from './types'
 import type { SimObject, Simulation } from './Simulation'
-import type { QualityGovernor } from './QualityGovernor'
+import type { QualityGovernor, QualityLevel } from './QualityGovernor'
 
 const G_SI = 6.674e-11
 const MSUN_KG = 1.989e30
@@ -64,13 +64,15 @@ export class LabController implements LabCommands, SnapshotSource {
 
   /** Her karede R3F döngüsünden çağrılır. */
   advance(delta: number): void {
+    // fizik adımı 50 ms ile kelepçelidir (entegratör kararlılığı) ama governor
+    // GERÇEK kare süresini görmeli — yoksa HUD 20 fps'in altını asla gösteremez
     const dt = Math.min(delta, 0.05)
     const dtSim = this.paused ? 0 : dt * SIM_SPEED * this.timeScale
     this.simTime += dtSim
     // uzun oturumda float32 shader zamanı hassas kalsın
     if (this.simTime > 7200) this.simTime -= 7200
     if (dtSim > 0) this.sim.step(dtSim)
-    this.governor.tick(dt)
+    this.governor.tick(delta)
     this.emitAcc += dt
     if (this.emitAcc >= 0.2) {
       this.emitAcc = 0
@@ -139,6 +141,13 @@ export class LabController implements LabCommands, SnapshotSource {
     this.timeScale = x
     this.publish()
   }
+
+  setQuality(label: string | null): void {
+    this.governor.setLevel(label)
+    this.publish()
+  }
+
+  qualityOptions = (): readonly QualityLevel[] => this.governor.options
 
   togglePause(): void {
     this.paused = !this.paused
@@ -215,6 +224,7 @@ export class LabController implements LabCommands, SnapshotSource {
     return {
       fps: Math.round(this.governor.fps),
       quality: this.governor.label,
+      qualityAuto: this.governor.auto,
       armed: this.armed,
       mode: this.mode,
       paused: this.paused,

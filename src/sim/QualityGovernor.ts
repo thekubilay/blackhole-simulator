@@ -44,6 +44,34 @@ export class QualityGovernor {
     return this.levels[this.level]
   }
 
+  /** Bu cihazda kullanılabilir seviyeler (HUD kalite menüsü için). */
+  get options(): readonly QualityLevel[] {
+    return this.levels
+  }
+
+  /** true = FPS'e göre adaptif; false = elle/URL ile sabitlenmiş. */
+  get auto(): boolean {
+    return !this.pinned
+  }
+
+  /** Elle seviye seç (adaptasyonu kapatır); null = otomatiğe dön. */
+  setLevel(label: string | null): void {
+    if (label === null) {
+      this.pinned = false
+      this.stable = 0
+      this.acc = 0
+      return
+    }
+    const i = this.levels.findIndex((l) => l.label === label)
+    if (i < 0) return
+    this.pinned = true
+    if (i !== this.level) {
+      this.level = i
+      this.stable = 0
+      this.notify()
+    }
+  }
+
   get fps(): number {
     return this.ema
   }
