@@ -565,7 +565,7 @@ a:hover {
   pointer-events: auto;
   z-index: 3;
 }
-/* geçici iskelet notu — oynanış geldikçe kalkacak */
+/* alt-orta kontrol ipucu */
 .ui .game-note {
   position: fixed;
   left: 50%;
@@ -576,6 +576,54 @@ a:hover {
   color: var(--ink-muted);
   letter-spacing: 0.06em;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+/* kenetlenme HUD şeridi: üst-orta, altı değer hücresi */
+.ui .game-hud {
+  position: fixed;
+  top: 14px;
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 18px;
+  padding: 8px 16px;
+}
+.ui .gstat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 52px;
+}
+.ui .gstat span {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  color: var(--ink-muted);
+}
+.ui .gstat b {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 13px;
+  color: #dccdbd;
+}
+.ui .g-ok {
+  color: #8fd694 !important;
+}
+.ui .g-warn {
+  color: #ff8f6b !important;
+}
+/* oyun sonu tek satırı: merkez, tek sebep + tekrar ipucu */
+.ui .game-msg {
+  position: fixed;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  padding: 16px 22px;
+  text-align: center;
+  max-width: min(480px, 86vw);
 }
 /* ── dokunmatik cihazlar: parmak hedefleri ─────────────────────── */
 @media (pointer: coarse) {

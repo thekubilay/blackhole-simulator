@@ -4,13 +4,13 @@ import { useFrame, useThree } from '@react-three/fiber'
 import type { GameController } from '../game/GameController'
 import { useGameSnapshot } from '../hooks/useGameSnapshot'
 
-// POV park pozu: disk düzleminin hemen üstü, bakış DÜMDÜZ yatay (pitch = 0) —
-// ufuk çizgisi ekran ortasında, disk altımızdan akar (kullanıcının referans
-// karesi). DİKKAT: r≲4'te gölge tüm gökyüzünü kaplar (siyah ekran, fiziksel
-// olarak doğru) — parkı o bölgeye indirme. İleride pod'un jeodezik (r, φ)
-// durumuna çapalanacak; şimdilik sabit rampa hedefi.
-const POV_POS = new THREE.Vector3(0, 0.32, 9.5)
-const POV_TARGET = new THREE.Vector3(0, 0.32, 0)
+// Kamera pod'un jeodezik konumuna çapalanır: CAM_H üstünde, bakış DÜMDÜZ
+// yatay (pitch = 0) hedefe — ufuk çizgisi ekran ortasında, disk altımızdan
+// akar (kullanıcının referans karesi). Pod alçaldıkça gölge büyür; r≲4'te
+// gökyüzünü kaplar (fiziksel olarak doğru) — ISCO ölümünün doğal karartması.
+const CAM_H = 0.3
+const POV_FALLBACK = new THREE.Vector3(0, CAM_H, 9.5)
+const POV_TARGET = new THREE.Vector3(0, CAM_H, 0)
 
 /**
  * Oyun modunda kamerayı devralır ve POV pozuna yumuşakça taşır. OrbitControls
@@ -22,6 +22,7 @@ export function GameCamera({ game }: { game: GameController }) {
   const controls = useThree((s) => s.controls) as { reset?: () => void } | null
   const camera = useThree((s) => s.camera)
   const look = useRef(new THREE.Vector3())
+  const target = useRef(new THREE.Vector3())
   const wasActive = useRef(false)
 
   useEffect(() => {
@@ -37,9 +38,14 @@ export function GameCamera({ game }: { game: GameController }) {
 
   useFrame((_, delta) => {
     if (!active) return
-    // kare hızından bağımsız üstel yumuşatma
-    const k = 1 - Math.exp(-2.5 * delta)
-    camera.position.lerp(POV_POS, k)
+    // hedef: pod'un üstü; pod yoksa (kurulum arası) park pozu
+    const podPos = game.podPosition()
+    if (podPos) target.current.set(podPos.x, podPos.y + CAM_H, podPos.z)
+    else target.current.copy(POV_FALLBACK)
+    // kare hızından bağımsız üstel yumuşatma — takip sıkı (4.5), yörünge
+    // hareketinde yüzme hissi bırakmayacak kadar hızlı ama giriş geçişi yumuşak
+    const k = 1 - Math.exp(-4.5 * delta)
+    camera.position.lerp(target.current, k)
     look.current.lerp(POV_TARGET, k)
     camera.lookAt(look.current)
     if (import.meta.env.DEV) {

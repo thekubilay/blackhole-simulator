@@ -10,6 +10,7 @@ import { LabController } from './sim/LabController'
 import { GameController } from './game/GameController'
 import { CameraRewind } from './scene/CameraRewind'
 import { GameCamera } from './scene/GameCamera'
+import { GameLoop } from './scene/GameLoop'
 import { FrameLoopDriver } from './scene/FrameLoopDriver'
 import { QualityManager } from './scene/QualityManager'
 import { LensedBackground } from './scene/LensedBackground'
@@ -36,7 +37,7 @@ export default function App() {
     // ?fps=120 → kare tavanı pinli başlar (test/ölçüm; HUD'dan da değişir)
     const fpsCap = params.get('fps') === '120' ? 120 : 60
     const controller = new LabController(sim, governor, BODY_REGISTRY, PRESETS, DEFAULT_PRESET_ID, fpsCap)
-    const game = new GameController()
+    const game = new GameController(controller)
     return { controller, governor, game }
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır
@@ -62,6 +63,7 @@ export default function App() {
           enablePan={false}
         />
         <CameraRewind controller={controller} />
+        <GameLoop game={game} />
         <GameCamera game={game} />
         <LensedBackground controller={controller} governor={governor} />
         <HorizonOccluders />

@@ -67,6 +67,9 @@ export interface SimObject {
   tCoord: number
   /** bırakılmadan beri biriken öz zaman (cismin kendi saati, rs/c) */
   tau: number
+  /** disk sürtünmesi çarpanı (varsayılan 1) — oyun katmanı gemilerin
+   * sarmallanma temposunu bununla yavaşlatır (süre limiti mekaniği) */
+  dragMul: number
 }
 
 /**
@@ -198,6 +201,7 @@ export class Simulation {
       ghost: false,
       tCoord: 0,
       tau: 0,
+      dragMul: 1,
     }
     outer.position.copy(pos)
     this.objects.push(obj)
@@ -369,7 +373,7 @@ export class Simulation {
       const rr = Math.hypot(o.pos.x, o.pos.z)
       const inDisk = Math.abs(o.pos.y) < 0.25 && rr > this.profile.diskIn && rr < this.profile.diskOut
       if (inDisk) {
-        const drag = 0.012 * Math.pow(this.profile.diskIn / rr, 2) * o.vel.length()
+        const drag = 0.012 * o.dragMul * Math.pow(this.profile.diskIn / rr, 2) * o.vel.length()
         // taban 0.6: sürtünme 4-hızı asla sıfırlayamaz (ergosferde statik
         // durum yoktur; tam durdurma fiziksel değildir ve durumu bozar)
         this.engine.scaleVelocity(o.st, Math.max(0.6, 1 - drag * dtSim))

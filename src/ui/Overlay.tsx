@@ -26,7 +26,8 @@ export function Overlay({ controller, game }: { controller: LabController; game:
     return () => window.removeEventListener('keydown', onKey)
   }, [g.active, game])
   if (g.active) {
-    // oyun görünümü: lab UI'si tamamen çekilir, sadece marka + çıkış kalır
+    const h = g.hud
+    // oyun görünümü: lab UI'si çekilir — marka + çıkış + kenetlenme HUD'u
     return (
       <div className="ui">
         <div className="brand">
@@ -38,7 +39,50 @@ export function Overlay({ controller, game }: { controller: LabController; game:
         <button className="icon-btn game-exit" onClick={() => game.exit()} aria-label="Oyundan çık (ESC)">
           <i className="fa-regular fa-xmark" aria-hidden="true" />
         </button>
-        <div className="game-note">iskelet sürüm — itki, yakıt ve Endurance sonraki adımda</div>
+        {h && g.phase === 'flying' && (
+          <div className="game-hud card">
+            <div className="gstat">
+              <span>MESAFE</span>
+              <b>{h.sep.toFixed(2)} r₊</b>
+            </div>
+            <div className="gstat">
+              <span>KAPANMA</span>
+              <b className={h.closure > 0 ? 'g-ok' : 'g-warn'}>
+                {h.closure >= 0 ? '+' : ''}
+                {h.closure.toFixed(3)} c
+              </b>
+            </div>
+            <div className="gstat">
+              <span>YAKIT</span>
+              <b className={h.fuel < 0.25 ? 'g-warn' : ''}>%{Math.round(h.fuel * 100)}</b>
+            </div>
+            <div className="gstat">
+              <span>SEN r</span>
+              <b className={h.podR < h.isco * 1.15 ? 'g-warn' : ''}>{h.podR.toFixed(1)}</b>
+            </div>
+            <div className="gstat">
+              <span>END r</span>
+              <b>{h.endR.toFixed(1)}</b>
+            </div>
+            <div className="gstat">
+              <span>ISCO</span>
+              <b>{h.isco.toFixed(1)}</b>
+            </div>
+          </div>
+        )}
+        {g.phase === 'flying' && (
+          <div className="game-note">W/↑ hızlan · S/↓ yavaşla — alçalan yörünge yetişir · R yeniden başlat</div>
+        )}
+        {(g.phase === 'docked' || g.phase === 'failed') && (
+          <div className="game-msg card">
+            <div className={g.phase === 'docked' ? 'g-ok' : 'g-warn'} style={{ fontSize: 13 }}>
+              {g.reason}
+            </div>
+            <div style={{ marginTop: 8, color: 'var(--ink-muted)', fontSize: 10 }}>
+              R — yeniden dene · ESC — lab'a dön
+            </div>
+          </div>
+        )}
       </div>
     )
   }
