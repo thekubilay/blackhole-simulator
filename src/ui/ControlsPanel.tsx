@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BODY_REGISTRY } from '../sim/bodies/registry'
 import { PRESETS } from '../physics/presets'
 import type { LabCommands, LabSnapshot, SpawnMode } from '../sim/types'
@@ -9,23 +10,45 @@ const MODES: [SpawnMode, string][] = [
 ]
 
 export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
+  const [open, setOpen] = useState(true)
   return (
-    <div
-      className="card"
-      style={{
-        position: 'fixed',
-        top: 14,
-        left: 16,
-        width: 248,
-        padding: '14px 14px 12px',
-        fontSize: 11,
-        userSelect: 'none',
-      }}
-    >
-      <div className="title">KARA DELİK LABORATUVARI</div>
-      <div className="subtitle">
-        {s.hole.name} · {s.hole.massLabel} · r₊ = 1 birim
+    <>
+      {/* logo + panel aç/kapa: her zaman görünür, panelin dışında */}
+      <div className="brand">
+        <div className="title">
+          KARA DELİK <span className="thin">LAB.</span>
+        </div>
+        <button
+          className="icon-btn"
+          onClick={() => setOpen(!open)}
+          aria-label={open ? 'Kontrol panelini kapat' : 'Kontrol panelini aç'}
+        >
+          {/* FA kit <i>'yi SVG ile değiştirir; React'ın söküp yeniden kurabilmesi
+              için ikon, key'li ve React'a ait bir span içinde yaşar */}
+          <span key={open ? 'x' : 'sliders'} style={{ display: 'contents' }}>
+            <i className={open ? 'fa-regular fa-xmark' : 'fa-regular fa-sliders'} aria-hidden="true" />
+          </span>
+        </button>
       </div>
+      {open && (
+        <div
+          className="card"
+          style={{
+            position: 'fixed',
+            top: 54,
+            left: 16,
+            width: 248,
+            padding: '12px 14px',
+            fontSize: 11,
+            userSelect: 'none',
+            // kısa pencerede alttaki telemetri kartıyla çakışma: panel kayar
+            maxHeight: 'calc(100vh - 400px)',
+            overflowY: 'auto',
+          }}
+        >
+          <div className="subtitle" style={{ margin: '0 0 4px' }}>
+            {s.hole.name} · {s.hole.massLabel} · r₊ = 1 birim
+          </div>
       <div className="lbl">KARA DELİK</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
         {Object.values(PRESETS).map((p) => (
@@ -76,9 +99,11 @@ export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) 
           Temizle
         </button>
       </div>
-      <div style={{ marginTop: 10, color: '#ffb877', fontSize: 10, minHeight: 26, lineHeight: 1.4 }}>
-        {s.hint}
-      </div>
-    </div>
+          <div style={{ marginTop: 10, color: '#ffb877', fontSize: 10, minHeight: 26, lineHeight: 1.4 }}>
+            {s.hint}
+          </div>
+        </div>
+      )}
+    </>
   )
 }

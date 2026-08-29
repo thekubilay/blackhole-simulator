@@ -67,6 +67,43 @@ a:hover {
   line-height: 1.3;
   color: #ffb877;
 }
+.title .thin {
+  font-weight: 300;
+}
+/* logo satırı: panelin dışında, her zaman görünür */
+.brand {
+  position: fixed;
+  top: 14px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 3;
+  pointer-events: none;
+}
+.brand .title {
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85);
+}
+.brand button {
+  pointer-events: auto;
+}
+.ui .icon-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  flex-shrink: 0;
+  color: #cbbcac;
+  background: var(--card-bg);
+  backdrop-filter: blur(10px);
+}
+.ui .icon-btn:hover {
+  background: rgba(255, 154, 77, 0.16);
+}
 .subtitle {
   color: var(--ink-muted);
   font-size: 11px;
@@ -252,19 +289,46 @@ a:hover {
   color: var(--ink);
   font-weight: 500;
 }
-/* çift saat bloğu: Dünya saati akar, öz zaman ufka yaklaştıkça durur */
-.clocks {
-  border: 1px solid var(--amber-line);
-  border-radius: var(--r-el);
-  background: rgba(255, 154, 77, 0.05);
-  padding: 6px 9px;
-  margin: 7px 0;
+/* telemetri şeridi: cisim bırakılınca alt-ortadan yükselir, sahneyi doldurmaz */
+.telemetry {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  padding: 10px 22px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(760px, calc(100vw - 32px));
+  animation: telemetry-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.clocks .kv {
-  margin: 2.5px 0;
+@keyframes telemetry-rise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 28px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
-.clocks .kv:first-child .v {
+.telemetry-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  align-items: flex-start;
+  justify-content: center;
+}
+.telemetry .stat {
+  min-width: 86px;
+}
+.telemetry-status {
+  text-align: center;
   color: #ffd9b3;
+  font-size: 10.5px;
+  font-weight: 300;
+  min-height: 14px;
+  letter-spacing: 0.02em;
 }
 .meter {
   height: 4px;
