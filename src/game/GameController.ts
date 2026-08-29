@@ -77,6 +77,11 @@ export class GameController {
     return this.pod ? this.pod.pos : null
   }
 
+  /** Kameranın baktığı hedef: kenetlenilecek istasyon. */
+  endurancePosition(): THREE.Vector3 | null {
+    return this.endurance ? this.endurance.pos : null
+  }
+
   enter(): void {
     if (this.snap.active) return
     window.addEventListener('keydown', this.onKeyDown)

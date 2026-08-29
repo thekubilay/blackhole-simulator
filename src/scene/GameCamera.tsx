@@ -4,10 +4,11 @@ import { useFrame, useThree } from '@react-three/fiber'
 import type { GameController } from '../game/GameController'
 import { useGameSnapshot } from '../hooks/useGameSnapshot'
 
-// Kamera pod'un jeodezik konumuna çapalanır: CAM_H üstünde, bakış DÜMDÜZ
-// yatay (pitch = 0) hedefe — ufuk çizgisi ekran ortasında, disk altımızdan
-// akar (kullanıcının referans karesi). Pod alçaldıkça gölge büyür; r≲4'te
-// gökyüzünü kaplar (fiziksel olarak doğru) — ISCO ölümünün doğal karartması.
+// Kamera pod'un jeodezik konumuna çapalanır (CAM_H üstünde) ve KENETLENME
+// HEDEFİNE bakar: Endurance önde-üstte olduğundan bakış kabaca prograd —
+// delik iç kenardan kadraja girer ve battıkça büyür (tehdit çevresel görüşte),
+// final yaklaşmada istasyon ekranı doldurur. Ders: deliğe bakan kamera hedefi
+// ASLA gösteremiyordu (hedef yakınken hep arkada, uzakken karşı yakada benek).
 const CAM_H = 0.3
 const POV_FALLBACK = new THREE.Vector3(0, CAM_H, 9.5)
 const POV_TARGET = new THREE.Vector3(0, CAM_H, 0)
@@ -38,15 +39,16 @@ export function GameCamera({ game }: { game: GameController }) {
 
   useFrame((_, delta) => {
     if (!active) return
-    // hedef: pod'un üstü; pod yoksa (kurulum arası) park pozu
+    // konum: pod'un üstü; bakış: Endurance — ikisi de yoksa park pozu
     const podPos = game.podPosition()
+    const endPos = game.endurancePosition()
     if (podPos) target.current.set(podPos.x, podPos.y + CAM_H, podPos.z)
     else target.current.copy(POV_FALLBACK)
     // kare hızından bağımsız üstel yumuşatma — takip sıkı (4.5), yörünge
     // hareketinde yüzme hissi bırakmayacak kadar hızlı ama giriş geçişi yumuşak
     const k = 1 - Math.exp(-4.5 * delta)
     camera.position.lerp(target.current, k)
-    look.current.lerp(POV_TARGET, k)
+    look.current.lerp(endPos ?? POV_TARGET, k)
     camera.lookAt(look.current)
     if (import.meta.env.DEV) {
       ;(window as unknown as Record<string, unknown>).__gameCam = {
