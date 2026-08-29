@@ -1,10 +1,11 @@
 export function PhysicsPanel({ onClose }: { onClose: () => void }) {
   return (
     <div className="card panel">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <div className="panel-head-row">
         <span className="panel-title">BİLİMSEL SPESİFİKASYON</span>
         <button onClick={onClose}>KAPAT ×</button>
       </div>
+      <div className="panel-body">
       <div className="sect">● UZAY-ZAMAN</div>
       <div className="body">
         Geometri: dönmeyen, yüksüz <b>Schwarzschild</b> karadeliği. Uzunluk birimi olay ufku yarıçapıdır. Cisim
@@ -94,6 +95,7 @@ export function PhysicsPanel({ onClose }: { onClose: () => void }) {
         ama <b>kalite tabanının</b> (tam çözünürlük, 150 adım) altına asla inmez; az bükülen uzak ışınlar analitik
         çizilir, dithering bantlaşmayı siler. 60 fps sınırı ve gizli sekmede 10 fps ile GPU uzun oturumda serin
         kalır; silinen her cismin geometri/doku belleği anında boşaltılır.
+      </div>
       </div>
     </div>
   )

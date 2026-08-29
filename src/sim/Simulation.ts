@@ -60,6 +60,9 @@ export interface SimObject {
   shed: DebrisSystem | null
   lastHeat: number
   spawnT: number
+  /** görseli kaldırılmış ama jeodezik durumu hâlâ ilerletilen kalıntı:
+   * uzak gözlemci telemetrisi ufka asimptotik sürünüşü göstermeye devam eder */
+  ghost: boolean
   /** bırakılmadan beri geçen koordinat zamanı (uzak gözlemci saati, rs/c) */
   tCoord: number
   /** bırakılmadan beri biriken öz zaman (cismin kendi saati, rs/c) */
@@ -192,6 +195,7 @@ export class Simulation {
       shed: null,
       lastHeat: -1,
       spawnT: 0,
+      ghost: false,
       tCoord: 0,
       tau: 0,
     }
@@ -235,6 +239,7 @@ export class Simulation {
 
   private kill(o: SimObject, status: string): void {
     o.alive = false
+    o.ghost = true
     this.root.remove(o.outer)
     disposeTree(o.outer)
     o.status = status
@@ -244,7 +249,18 @@ export class Simulation {
     const { tmpA, tmpB, qTmp, up } = this
     this.time += dtSim
     for (const o of this.objects) {
-      if (!o.alive) continue
+      if (!o.alive) {
+        // hayalet: görsel yok ama jeodezik durum akmaya devam eder — uzak
+        // gözlemci için uzaklık 1'e asimptotik iner, Dünya saati akar, τ durur.
+        // Ufka fiilen varınca (prox ≤ 1e-4) kayıt biter: saatler son değerde donar.
+        if (o.ghost && o.st.r - 1 > 1e-4) {
+          const gtau = this.engine.advance(o.st, dtSim)
+          o.tCoord += dtSim
+          o.tau += gtau
+          this.engine.positionOf(o.st, o.pos)
+        }
+        continue
+      }
       // TAM jeodezik ilerleme (koordinat zamanı bütçesi, öz zaman döner)
       const phi0 = o.st.phi
       const dtau = this.engine.advance(o.st, dtSim)
@@ -354,7 +370,9 @@ export class Simulation {
       const inDisk = Math.abs(o.pos.y) < 0.25 && rr > this.profile.diskIn && rr < this.profile.diskOut
       if (inDisk) {
         const drag = 0.012 * Math.pow(this.profile.diskIn / rr, 2) * o.vel.length()
-        this.engine.scaleVelocity(o.st, Math.max(0, 1 - drag * dtSim))
+        // taban 0.6: sürtünme 4-hızı asla sıfırlayamaz (ergosferde statik
+        // durum yoktur; tam durdurma fiziksel değildir ve durumu bozar)
+        this.engine.scaleVelocity(o.st, Math.max(0.6, 1 - drag * dtSim))
       }
       // Roche kütle kaybı: uzun "spagetti" parçacık akımının kendisidir
       if (!o.dissolving && s > 1.5) {

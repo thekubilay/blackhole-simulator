@@ -78,10 +78,11 @@ export function QuantumPanel({ onClose }: { onClose: () => void }) {
   }, [])
   return (
     <div className="card panel" style={{ flexShrink: 0 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+      <div className="panel-head-row">
         <span className="panel-title">KUANTUM ETKİLERİ</span>
         <button onClick={onClose}>KAPAT ×</button>
       </div>
+      <div className="panel-body">
       <Row k="UFUK ALANI" v={exp2(Q.A) + ' m²'} />
       <Row k="ENTROPİ S/k_B" v={exp2(Q.S)} />
       <Row k="T_H (Hawking)" v={exp2(Q.TH) + ' K'} />
@@ -96,6 +97,7 @@ export function QuantumPanel({ onClose }: { onClose: () => void }) {
       <div style={{ color: '#8d7f70', fontSize: 9, lineHeight: 1.6, marginTop: 10, letterSpacing: '.08em' }}>
         HAWKING IŞIMASI · TEMSİLİ · TAYF: HAWKING 1974/75 · TEPE {exp2(Q.peak)} HZ
         <br />S = A c³ / 4Għ &nbsp;·&nbsp; T_H = ħc³ / 8πGMk_B &nbsp;·&nbsp; t = 5120πG²M³ / ħc⁴
+      </div>
       </div>
     </div>
   )

@@ -15,7 +15,7 @@ export function Overlay({ controller }: { controller: LabController }) {
     <div className="ui">
       <HudStrip s={s} />
       <ControlsPanel s={s} lab={controller} />
-      <TelemetryPanel s={s} />
+      <TelemetryPanel s={s} lab={controller} />
       <div className="dock">
         <div className="dock-toggles">
           {!physOpen && (

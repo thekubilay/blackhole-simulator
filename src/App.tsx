@@ -6,6 +6,7 @@ import { BODY_REGISTRY } from './sim/bodies/registry'
 import { Simulation } from './sim/Simulation'
 import { QualityGovernor } from './sim/QualityGovernor'
 import { LabController } from './sim/LabController'
+import { CameraRewind } from './scene/CameraRewind'
 import { FrameLoopDriver } from './scene/FrameLoopDriver'
 import { QualityManager } from './scene/QualityManager'
 import { LensedBackground } from './scene/LensedBackground'
@@ -35,7 +36,8 @@ export default function App() {
       >
         <FrameLoopDriver />
         <QualityManager governor={governor} />
-        <OrbitControls enableDamping dampingFactor={0.06} minDistance={3} maxDistance={42} enablePan={false} />
+        <OrbitControls makeDefault enableDamping dampingFactor={0.06} minDistance={3} maxDistance={42} enablePan={false} />
+        <CameraRewind controller={controller} />
         <LensedBackground controller={controller} governor={governor} />
         <HorizonOccluders />
         <Lights />

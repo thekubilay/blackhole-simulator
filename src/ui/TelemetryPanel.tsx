@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { LabSnapshot } from '../sim/types'
+import type { LabCommands, LabSnapshot } from '../sim/types'
 import { fmt, fmtMs } from './format'
 
 function Cell({ k, v, accent, children }: { k: string; v: ReactNode; accent?: boolean; children?: ReactNode }) {
@@ -19,15 +19,20 @@ function Cell({ k, v, accent, children }: { k: string; v: ReactNode; accent?: bo
  * animasyonla yükselir. Sahneyi doldurmaz — beş hücre + durum + gelgit çizgisi.
  * Kızıla kayma / anlık genişleme sağ üst HUD'da olduğundan burada yoktur.
  */
-export function TelemetryPanel({ s }: { s: LabSnapshot }) {
+export function TelemetryPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
   const F = s.focus
   if (!F) return null
   // ufka yaklaşma: r₊/r — uzakta ~0, ufukta 1 (doğal GR ölçüsü)
   const approach = Math.min(1 / F.r, 1)
   return (
     <div className="card telemetry">
+      {!F.alive && (
+        <button className="telemetry-clear" onClick={() => lab.clear()}>
+          <i className="fa-regular fa-eraser" aria-hidden="true" /> TEMİZLE
+        </button>
+      )}
       <div className="telemetry-row">
-        <Cell k="UZAKLIK" v={fmt(F.r, F.r < 1.01 ? 4 : 2) + ' r₊'}>
+        <Cell k="UFKA UZAKLIK" v={fmt(Math.max(F.r - 1, 0), F.r - 1 < 0.01 ? 4 : 2) + ' r₊'}>
           <div className="meter">
             <div style={{ width: approach * 100 + '%' }} />
           </div>

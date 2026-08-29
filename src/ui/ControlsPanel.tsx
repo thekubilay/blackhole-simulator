@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BODY_REGISTRY } from '../sim/bodies/registry'
+// import { BODY_REGISTRY } from '../sim/bodies/registry' // NESNE bölümü şimdilik gizli
 import { PRESETS } from '../physics/presets'
 import type { LabCommands, LabSnapshot, SpawnMode } from '../sim/types'
 
@@ -28,6 +28,9 @@ export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) 
           <span key={open ? 'x' : 'sliders'} style={{ display: 'contents' }}>
             <i className={open ? 'fa-regular fa-xmark' : 'fa-regular fa-sliders'} aria-hidden="true" />
           </span>
+        </button>
+        <button className="icon-btn" onClick={() => lab.rewind()} aria-label="Sahneyi başa sar">
+          <i className="fa-regular fa-arrow-rotate-right" aria-hidden="true" />
         </button>
       </div>
       {open && (
@@ -66,6 +69,7 @@ export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) 
           Gerçekçi (g⁴)
         </button>
       </div>
+      {/* NESNE seçimi şimdilik gizli — tek nesne türü (Astronot) var
       <div className="lbl">NESNE</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
         {Object.entries(BODY_REGISTRY).map(([type, def]) => (
@@ -74,6 +78,7 @@ export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) 
           </button>
         ))}
       </div>
+      */}
       <div className="lbl">BAŞLANGIÇ HIZI</div>
       <div className="seg">
         {MODES.map(([mode, label]) => (

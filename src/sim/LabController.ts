@@ -41,6 +41,7 @@ export class LabController implements LabCommands, SnapshotSource {
   private timeScale = 1
   private focus: SimObject | null = null
   private realistic = false
+  private resetSeq = 0
   private hint = 'Astronot hazır — bırakmak için disk düzleminde bir noktaya tıkla.'
   private emitAcc = 0
   private snap: LabSnapshot
@@ -79,6 +80,14 @@ export class LabController implements LabCommands, SnapshotSource {
 
   spawnAt = (point: THREE.Vector3): void => {
     if (!this.armed) return
+    // tek astronot kuralı: sahnede bir cisim varken yenisi bırakılamaz
+    if (this.sim.objects.length > 0) {
+      this.hint = this.sim.objects.some((o) => o.alive)
+        ? 'Sahnede zaten bir astronot var — yörüngesini izleyin ya da ↻ ile sahneyi başa sarın.'
+        : 'Önceki astronot yutuldu — yenisini bırakmak için sahneyi sıfırlayın (Temizle ya da ↻).'
+      this.publish()
+      return
+    }
     const obj = this.sim.spawn(this.armed, point, this.mode)
     this.focus = obj
     this.hint = `${obj.label} bırakıldı · r = ${point.length().toFixed(1)} r₊`
@@ -140,6 +149,17 @@ export class LabController implements LabCommands, SnapshotSource {
     this.sim.clear()
     this.focus = null
     this.hint = 'Sahne temizlendi'
+    this.publish()
+  }
+
+  /** Tam "başa sar": nesneler, duraklatma, zaman hızı ve kamera sıfırlanır. */
+  rewind(): void {
+    this.sim.clear()
+    this.focus = null
+    this.paused = false
+    this.timeScale = 1
+    this.resetSeq++
+    this.hint = 'Sahne başa sarıldı — kamera ve zaman sıfırlandı.'
     this.publish()
   }
 
@@ -209,6 +229,7 @@ export class LabController implements LabCommands, SnapshotSource {
         spinLabel: this.preset.spinLabel,
       },
       realistic: this.realistic,
+      resetSeq: this.resetSeq,
     }
   }
 }

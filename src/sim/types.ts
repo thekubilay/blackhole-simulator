@@ -60,6 +60,8 @@ export interface LabSnapshot {
   hole: HoleInfo
   /** görsel mod: true = fiziksel (g⁴ hüzmeleme, kara cisim renkleri) */
   realistic: boolean
+  /** her "başa sar"da artar — sahne bileşenleri (kamera) bunu izleyip sıfırlanır */
+  resetSeq: number
 }
 
 /** ISP: UI'nin komut tarafı — durum okumadan ayrı. */
@@ -73,6 +75,8 @@ export interface LabCommands {
   setHole(id: string): void
   /** görsel mod: sanatsal palet ↔ fiziksel (g⁴ + kara cisim) */
   setRealistic(on: boolean): void
+  /** tam sıfırlama: nesneler + duraklatma + zaman hızı + kamera başa döner */
+  rewind(): void
 }
 
 /** ISP: UI'nin okuma tarafı — useSyncExternalStore sözleşmesi. */

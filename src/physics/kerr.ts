@@ -250,8 +250,18 @@ export class KerrEngine implements GeodesicEngine {
   }
 
   scaleVelocity(st: OrbitalState, k: number): void {
+    const uR0 = st.uR
+    const L0 = st.L
+    const E0 = st.E
     st.uR *= k
     st.L *= k
     this.recomputeE(st)
+    // ergosfer içinde statik-benzeri durum fiziksel olarak imkânsızdır
+    // (çerçeve sürüklenmesi): E çözümü geçersizse değişiklik uygulanmaz
+    if (!(st.E > 0) || !Number.isFinite(st.E)) {
+      st.uR = uR0
+      st.L = L0
+      st.E = E0
+    }
   }
 }
