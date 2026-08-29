@@ -40,6 +40,7 @@ export class LabController implements LabCommands, SnapshotSource {
   private paused = false
   private timeScale = 1
   private focus: SimObject | null = null
+  private realistic = false
   private hint = 'Astronot hazır — bırakmak için disk düzleminde bir noktaya tıkla.'
   private emitAcc = 0
   private snap: LabSnapshot
@@ -95,8 +96,20 @@ export class LabController implements LabCommands, SnapshotSource {
   }
 
   /** Görsel katmanın (shader) okuduğu, deliğe özgü GERÇEK türetimler. */
-  get visual(): { diskIn: number; efficiency: number } {
-    return { diskIn: this.preset.profile.diskIn, efficiency: this.preset.efficiency }
+  get visual(): { diskIn: number; efficiency: number; realism: number } {
+    return {
+      diskIn: this.preset.profile.diskIn,
+      efficiency: this.preset.efficiency,
+      realism: this.realistic ? 1 : 0,
+    }
+  }
+
+  setRealistic(on: boolean): void {
+    this.realistic = on
+    this.hint = on
+      ? 'Gerçekçi mod: parlaklık ∝ g⁴ (toplam kayma) — yaklaşan taraf kat kat parlak ve mavi, iç kenar kütleçekimsel kaymayla sönük; disk kara cisim renginde, yıldızlar pozlama gereği söner.'
+      : 'Sanatsal mod: referans-görüntü paleti — Doppler asimetrisi yumuşatılmış, sıcak altın tonlar.'
+    this.publish()
   }
 
   setArmed(type: string): void {
@@ -195,6 +208,7 @@ export class LabController implements LabCommands, SnapshotSource {
         massLabel: this.preset.massLabel,
         spinLabel: this.preset.spinLabel,
       },
+      realistic: this.realistic,
     }
   }
 }

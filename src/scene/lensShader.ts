@@ -13,7 +13,8 @@ uniform int uSteps;
 uniform vec3 uCamPos;
 uniform mat4 uCamMat, uProjInv;
 // disk iç kenarı = aktif deliğin ISCO'su; uEff = ışıma verimi η = 1 − E_ISCO
-uniform float uDiskIn, uEff;
+// uRealism: 0 = sanatsal palet, 1 = fiziksel (g⁴ hüzmeleme + kara cisim rengi)
+uniform float uDiskIn, uEff, uRealism;
 #define R_OUT 13.5
 mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
 float hash12(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
@@ -47,6 +48,11 @@ vec3 diskRamp(float rr){
   vec3 hot=vec3(1.25,1.08,.92), mid=vec3(1.05,.52,.15), cool=vec3(.32,.08,.025);
   return mix(hot, mix(mid,cool,smoothstep(.12,.8,t)), smoothstep(0.,.22,t));
 }
+// kara cisim yaklaşığı: x = göreli sıcaklık (kayma dahil) → kızıl → beyaz → mavi-beyaz
+vec3 bbRamp(float x){
+  vec3 cold = vec3(1.0,.22,.04), mid = vec3(1.0,.88,.72), hot = vec3(.62,.76,1.35);
+  return x < 1.0 ? mix(cold, mid, smoothstep(.12,1.,x)) : mix(mid, hot, smoothstep(1.,1.9,x));
+}
 void sampleDisk(vec3 hp, vec3 vn, inout vec4 acc){
   float rr = length(hp.xz);
   // iki RİJİT dönen gürültü katmanı (iç hızlı, dış yavaş), yarıçapla harmanlı:
@@ -70,14 +76,22 @@ void sampleDisk(vec3 hp, vec3 vn, inout vec4 acc){
   float beta = clamp(sqrt(0.5/max(rr,1.4)), 0., 0.62);
   float gamma = 1./sqrt(1.-beta*beta);
   float dop = 1./(gamma*(1.+beta*dot(td,vn)));
-  // I ∝ δ^(3+α), α≈0.6 spektral indis — ayrık yayıcı geometrisi
-  // (Urry & Padovani); sürekli jetlerde üs 2+α olurdu
-  E *= pow(dop, 3.6);
-  E *= sqrt(max(1.-1./rr, 0.05));
-  vec3 c = diskRamp(rr);
-  c = mix(c, vec3(1.08,1.02,.95), clamp(uEff*1.6*pow(uDiskIn/rr, 2.0), 0., .5));
-  c = mix(c, vec3(1.02,.99,.96), clamp((dop-1.)*.9,0.,.65));
-  c = mix(c, c*vec3(1.,.42,.26), clamp((1.-dop)*1.4,0.,.85));
+  float gfac = sqrt(max(1.-1./rr, 0.03));   // kütleçekimsel kayma √(1−rs/r)
+  float shift = dop * gfac;                 // toplam g = ν_gözlenen/ν_yayılan
+  // Sanatsal: δ^(3.6)·√f (mevcut görünüm). Gerçekçi: bolometrik I ∝ g⁴ —
+  // yaklaşan taraf kat kat parlak, iç kenar kütleçekimsel kaymayla SÖNÜK
+  float boostA = pow(dop, 3.6) * gfac;
+  float boostR = 0.8 * pow(shift, 4.0);
+  E *= mix(boostA, boostR, uRealism);
+  // Sanatsal renk: altın palet + belirgin Doppler mavi/kızıl ayrımı
+  vec3 cA = diskRamp(rr);
+  cA = mix(cA, vec3(1.08,1.02,.95), clamp(uEff*1.6*pow(uDiskIn/rr, 2.0), 0., .5));
+  cA = mix(cA, vec3(.98,1.0,1.08), clamp((dop-1.)*1.1,0.,.75));
+  cA = mix(cA, cA*vec3(1.,.40,.24), clamp((1.-dop)*1.5,0.,.9));
+  // Gerçekçi renk: Shakura–Sunyaev T ∝ r^(−3/4), gözlenen sıcaklık g ile kayar —
+  // disk mavi-beyaz, yaklaşan taraf maviye, uzaklaşan/iç bölge kızıla
+  float tRel = 1.35 * pow(uDiskIn/max(rr,uDiskIn), 0.75) * shift;
+  vec3 c = mix(cA, bbRamp(tRel), uRealism);
   float a = clamp(E*.55,0.,.95);
   acc.rgb += (1.-acc.a)*c*E;
   acc.a  += (1.-acc.a)*a*.7;
@@ -101,7 +115,8 @@ void main(){
         if(rr>uDiskIn && rr<R_OUT) sampleDisk(hp, v, acc);
       }
     }
-    vec3 cf = acc.rgb + (1.-acc.a)*stars(v);
+    // pozlama ödünü: gerçekçi modda disk parlaklığı yıldızları bastırır
+    vec3 cf = acc.rgb + (1.-acc.a)*stars(v)*mix(1.0, 0.12, uRealism);
     cf = aces(cf); cf = pow(cf, vec3(0.4545));
     cf += (hash12(gl_FragCoord.xy*.73)-.5)*0.012;
     float vf = 1.-0.32*pow(length(ndc*vec2(1.,.8)),2.6);
@@ -127,12 +142,12 @@ void main(){
     }
     if(acc.a > 0.99) break;
   }
-  vec3 bg = captured ? vec3(0.) : stars(normalize(v));
+  vec3 bg = captured ? vec3(0.) : stars(normalize(v))*mix(1.0, 0.12, uRealism);
   vec3 col = acc.rgb + (1.-acc.a)*bg;
   if(!captured){
-    col += vec3(1.,.5,.24)*0.30*exp(-pow((minR-2.75)*1.15,2.));
+    col += mix(vec3(1.,.5,.24), vec3(.75,.85,1.15), uRealism)*0.30*exp(-pow((minR-2.75)*1.15,2.));
     // foton halkası: foton küresini (1.5 rs) sıyıran ışınların ince akkor çizgisi
-    col += vec3(1.05,.92,.75)*0.5*exp(-pow((minR-1.55)*5.5,2.));
+    col += mix(vec3(1.05,.92,.75), vec3(.9,.95,1.2), uRealism)*0.5*exp(-pow((minR-1.55)*5.5,2.));
   }
   col = aces(col);
   col = pow(col, vec3(0.4545));
@@ -151,6 +166,7 @@ export type LensUniforms = {
   uSteps: THREE.IUniform<number>
   uDiskIn: THREE.IUniform<number>
   uEff: THREE.IUniform<number>
+  uRealism: THREE.IUniform<number>
 }
 
 export function createLensUniforms(): LensUniforms {
@@ -163,5 +179,6 @@ export function createLensUniforms(): LensUniforms {
     uSteps: { value: 150 },
     uDiskIn: { value: 2.35 },
     uEff: { value: 0.06 },
+    uRealism: { value: 0 },
   }
 }

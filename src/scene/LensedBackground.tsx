@@ -31,6 +31,10 @@ export function LensedBackground({
     // deliğe özgü GERÇEK türetimler: disk iç kenarı = ISCO, verim η = 1 − E_ISCO
     uniforms.uDiskIn.value = controller.visual.diskIn
     uniforms.uEff.value = controller.visual.efficiency
+    // görsel moda yumuşak geçiş (0 ↔ 1 arası 0.35 s ease)
+    const target = controller.visual.realism
+    uniforms.uRealism.value += (target - uniforms.uRealism.value) * 0.12
+    if (Math.abs(uniforms.uRealism.value - target) < 0.002) uniforms.uRealism.value = target
   })
   return (
     <mesh renderOrder={-10} frustumCulled={false}>

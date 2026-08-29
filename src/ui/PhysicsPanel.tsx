@@ -68,17 +68,23 @@ export function PhysicsPanel({ onClose }: { onClose: () => void }) {
         üstünde/altında görünen arka yüzü bu denklemin doğal sonucudur — dokuya boyanmaz.
       </div>
       <div className="fx">d²x/dλ² = −(3/2) h² x / r⁵ &nbsp;&nbsp;(h: ışının özgül açısal momentumu)</div>
-      <div className="sect">● DİSK IŞIMASI</div>
+      <div className="sect">● DİSK IŞIMASI — İKİ MOD</div>
       <div className="body">
-        Yaklaşan taraf <b>Doppler hüzmelemesi</b> ile parlar ve maviye, uzaklaşan taraf söner ve kızıla kayar;
-        tüm disk ayrıca kütleçekimsel √(1−r<sub>s</sub>/r) sönümü alır. Renk rampası Shakura–Sunyaev T ∝ r
-        <sup>−3/4</sup> profilini izler. Disk düzlemine bırakılan cisim <b>plazma sürtünmesi</b> yaşar: yörünge
-        enerjisi gaza aktarılır, E ve L gerçekten azalır ve cisim ISCO'ya, oradan ufka sarmallanır — yığılma
-        (accretion) tam olarak budur. (Sürtünme katsayısı fenomenolojiktir; gerçek disklerde taşınımı MHD
-        türbülansı yapar.)
+        <b>Gerçekçi mod</b>: gözlenen parlaklık toplam kayma faktörünün 4. kuvvetiyle ölçeklenir — I ∝ g⁴,
+        g = δ·√(1−r<sub>s</sub>/r). Yaklaşan taraf <b>kat kat parlak ve mavi</b> (Doppler hüzmelemesi — M87*
+        EHT görüntüsündeki asimetrinin nedeni), uzaklaşan taraf sönük ve kızıl; iç kenar kütleçekimsel kaymayla{' '}
+        <b>sönükleşir</b> (Luminet 1979'daki gibi en parlak bölge iç kenar değil, yaklaşan yandır). Renk, T ∝ r
+        <sup>−3/4</sup> Shakura–Sunyaev profili × g kaymasıyla kara cisim rampasından gelir — gerçek bir yıldız
+        kütleli delik diski mavi-beyazdır (büyük kısmı morötesi/X-ışını). Diske pozlanmış bir kamerada yıldızlar
+        görünmez — bu modda yıldızlar bu yüzden söner. <b>Sanatsal mod</b>: Interstellar'ın yaptığı tercihtir —
+        Thorne ekibi kaymaları hesapladı, Nolan seyirci için simetrik sıcak paleti seçti; burada da asimetri
+        yumuşatılır ve altın palet kullanılır. Disk düzlemine bırakılan cisim her iki modda da <b>plazma
+        sürtünmesi</b> yaşar: E ve L gerçekten azalır, cisim ISCO'ya, oradan ufka sarmallanır. (Sürtünme
+        katsayısı fenomenolojiktir; gerçek disklerde taşınımı MHD türbülansı yapar.)
       </div>
       <div className="fx">
-        δ = [γ(1 + β·n̂)]⁻¹ &nbsp;|&nbsp; I ∝ δ<sup>3.6</sup> &nbsp;|&nbsp; β = √(r<sub>s</sub>/2r)
+        δ = [γ(1 + β·n̂)]⁻¹ &nbsp;|&nbsp; g = δ·√(1−r<sub>s</sub>/r) &nbsp;|&nbsp; I ∝ g⁴ (gerçekçi) · δ
+        <sup>3.6</sup> (sanatsal)
       </div>
       <div className="sect">● MİMARİ &amp; PERFORMANS</div>
       <div className="body">
