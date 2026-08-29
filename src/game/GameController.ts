@@ -44,7 +44,9 @@ export interface GameSnapshot {
 const THRUST_ACC = 0.005 // Δv oranı: c / gerçek saniye
 const FUEL_DV = 0.12 // toplam Δv bütçesi (c) — sınırlı yakıt = her itki bir karar
 const DOCK_DIST = 0.45 // temas eşiği (r₊)
-const DOCK_SPEED = 0.015 // güvenli temas hız limiti (c)
+// 0.015 fazla cömertti: Δr≈0.35'lik pasif sürüklenme (≈0.012c) fren yapmadan
+// kenetleniyordu — limit doğal sürüklenmenin ALTINDA olmalı ki fren şart olsun
+const DOCK_SPEED = 0.008 // güvenli temas hız limiti (c)
 const LOST_R = 16 // diskin çok üstü: akıntıdan çıktın ama hedefi de kaçırdın
 
 export class GameController {
@@ -138,8 +140,10 @@ export class GameController {
     // ?oyun=temas → temas zarfının içinde doğ (kenetlenme dalı doğrulaması)
     const pin = this.pin
     const rEnd = 7.4 + Math.random() * 1.2
-    const rPod = pin === 'temas' ? rEnd - 0.03 : pin === 'yakin' ? rEnd - 0.35 : rEnd - (0.9 + Math.random() * 0.5)
-    const gapDeg = pin === 'temas' ? 1.2 : pin === 'yakin' ? 6 : 12 + Math.random() * 18
+    // yakin: pasif sürüklenme temasa GİRMEMELİ (0.35/6° kendiliğinden
+    // kenetleniyordu) — doğru anda tırmanış + fren gerektiren prova geometrisi
+    const rPod = pin === 'temas' ? rEnd - 0.03 : pin === 'yakin' ? rEnd - 0.5 : rEnd - (0.9 + Math.random() * 0.5)
+    const gapDeg = pin === 'temas' ? 0.6 : pin === 'yakin' ? 15 : 12 + Math.random() * 18
     const gapAhead = (gapDeg * Math.PI) / 180 // Endurance önde
     this.endurance = lab.sim.spawn(
       'endurance',
