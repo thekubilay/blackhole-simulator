@@ -157,6 +157,9 @@ export class GameController {
       true,
     )
     this.pod = lab.sim.spawn('pod', this.tmpV.set(rPod, 0, 0), 'orbit', true)
+    // POV: kamera bu gövdenin içinde sayılır — modeli kadraja girmesin
+    // (kullanıcı kendi mekiğini yanında süzülen ayrı bir araç sandı)
+    this.pod.outer.visible = false
     // sürtünme asimetrisi oyunun kalbi: hasarlı mekik akıntıya kapılmış,
     // Endurance dirençli (referans: varsayılan tempo ISCO'yu 13 sn'de boylatır)
     this.endurance.dragMul = 0.08

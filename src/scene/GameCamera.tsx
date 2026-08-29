@@ -44,11 +44,13 @@ export function GameCamera({ game }: { game: GameController }) {
     const endPos = game.endurancePosition()
     if (podPos) target.current.set(podPos.x, podPos.y + CAM_H, podPos.z)
     else target.current.copy(POV_FALLBACK)
-    // kare hızından bağımsız üstel yumuşatma — takip sıkı (4.5), yörünge
-    // hareketinde yüzme hissi bırakmayacak kadar hızlı ama giriş geçişi yumuşak
-    const k = 1 - Math.exp(-4.5 * delta)
-    camera.position.lerp(target.current, k)
-    look.current.lerp(endPos ?? POV_TARGET, k)
+    // kare hızından bağımsız üstel yumuşatma. Bakış, konumdan daha sıkı:
+    // yakın geçişte hedefin açısal hızı yüksek — gevşek bakış (4.5 denendi)
+    // Endurance'ı kadraj kenarına kaçırıyor
+    const kPos = 1 - Math.exp(-8 * delta)
+    const kLook = 1 - Math.exp(-12 * delta)
+    camera.position.lerp(target.current, kPos)
+    look.current.lerp(endPos ?? POV_TARGET, kLook)
     camera.lookAt(look.current)
     if (import.meta.env.DEV) {
       ;(window as unknown as Record<string, unknown>).__gameCam = {
