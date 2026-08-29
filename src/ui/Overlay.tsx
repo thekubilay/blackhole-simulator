@@ -34,7 +34,10 @@ export function Overlay({ controller, game }: { controller: LabController; game:
           <div className="title">
             KARA DELİK <span className="thin">LAB.</span>
           </div>
-          <div className="brand-sub">KENETLENME · {s.hole.name}</div>
+          <div className="brand-sub">
+            KENETLENME · {s.hole.name}
+            {game.pin ? ` · TEST PİNİ: ${game.pin}` : ''}
+          </div>
         </div>
         <button className="icon-btn game-exit" onClick={() => game.exit()} aria-label="Oyundan çık (ESC)">
           <i className="fa-regular fa-xmark" aria-hidden="true" />
@@ -71,7 +74,9 @@ export function Overlay({ controller, game }: { controller: LabController; game:
           </div>
         )}
         {g.phase === 'flying' && (
-          <div className="game-note">W/↑ hızlan · S/↓ yavaşla — alçalan yörünge yetişir · R yeniden başlat</div>
+          <div className="game-note">
+            Akıntıdasın — W/↑ tırman · S/↓ dal (derin uçuş faz kazandırır, tırmanış yakıt ister) · R yeniden başlat
+          </div>
         )}
         {(g.phase === 'docked' || g.phase === 'failed') && (
           <div className="game-msg card">

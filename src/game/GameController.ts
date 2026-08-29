@@ -39,14 +39,17 @@ export interface GameSnapshot {
 }
 
 // Oyun hissi buradan akort edilir (playtest ile güncellenir)
-// İlk playtest dersi: 0.03 c/s itki 4 saniyede yörüngeyi 4 r₊ düşürüyordu —
-// kontrol edilemez. Yumuşak itki + ~12 saniyelik toplam yanma bütçesi.
-const THRUST_ACC = 0.01 // Δv oranı: c / gerçek saniye
+// Playtest dersleri: 0.03 c/s itki 4 sn'de 4 r₊ düşürüyordu; 0.01 bile tam
+// depoyla r=7→31 fırlatıyor. 0.005 + 24 sn bütçe: tırmanış mümkün, savurma değil.
+const THRUST_ACC = 0.005 // Δv oranı: c / gerçek saniye
 const FUEL_DV = 0.12 // toplam Δv bütçesi (c) — sınırlı yakıt = her itki bir karar
 const DOCK_DIST = 0.45 // temas eşiği (r₊)
 const DOCK_SPEED = 0.015 // güvenli temas hız limiti (c)
+const LOST_R = 16 // diskin çok üstü: akıntıdan çıktın ama hedefi de kaçırdın
 
 export class GameController {
+  /** aktif ?oyun= test pini — kurulumda kullanılır, UI'de rozet olarak görünür */
+  readonly pin: string | null = new URLSearchParams(window.location.search).get('oyun')
   private readonly lab: LabController
   private engine: GeodesicEngine
   private pod: SimObject | null = null
@@ -127,12 +130,16 @@ export class GameController {
     lab.clear()
     this.engine = PRESETS[lab.getSnapshot().hole.id].engine
     // her denemede rastgele kurulum: ezber yok, okuma becerisi var
+    // KURGU (kullanıcının tasarımı): mekik AKINTIDA — disk sürtünmesi onu
+    // durmadan deliğe çeker; Endurance üstte, sağlam yörüngede yavaş bozunur.
+    // W = akıntıya karşı tırman (yakıt yer, fazda geriletir), S = bilerek dal
+    // (faz kazandırır ama ISCO yaklaşır). Kurtuluş = kenetlenme.
     // test/akort pinleri: ?oyun=yakin → son yaklaşma provası;
     // ?oyun=temas → temas zarfının içinde doğ (kenetlenme dalı doğrulaması)
-    const pin = new URLSearchParams(window.location.search).get('oyun')
-    const rEnd = 6.6 + Math.random() * 1.6
-    const rPod = pin === 'temas' ? rEnd + 0.05 : pin === 'yakin' ? rEnd + 0.2 : rEnd + 1.0 + Math.random() * 1.0
-    const gapDeg = pin === 'temas' ? 1.5 : pin === 'yakin' ? 5 : 30 + Math.random() * 45
+    const pin = this.pin
+    const rEnd = 7.4 + Math.random() * 1.2
+    const rPod = pin === 'temas' ? rEnd - 0.03 : pin === 'yakin' ? rEnd - 0.35 : rEnd - (0.9 + Math.random() * 0.5)
+    const gapDeg = pin === 'temas' ? 1.2 : pin === 'yakin' ? 6 : 12 + Math.random() * 18
     const gapAhead = (gapDeg * Math.PI) / 180 // Endurance önde
     this.endurance = lab.sim.spawn(
       'endurance',
@@ -141,10 +148,10 @@ export class GameController {
       true,
     )
     this.pod = lab.sim.spawn('pod', this.tmpV.set(rPod, 0, 0), 'orbit', true)
-    // gemiler astronot gösterisinin sürtünme temposunda 13 saniyede ISCO'yu
-    // boyluyor (playtest ölçümü) — oyun penceresi için ~8x yavaş sarmallanma
-    this.endurance.dragMul = 0.12
-    this.pod.dragMul = 0.12
+    // sürtünme asimetrisi oyunun kalbi: hasarlı mekik akıntıya kapılmış,
+    // Endurance dirençli (referans: varsayılan tempo ISCO'yu 13 sn'de boylatır)
+    this.endurance.dragMul = 0.08
+    this.pod.dragMul = 0.16 // 0.55 denendi: 18 sn'de ISCO — deneme şansı yok
     this.fuel = FUEL_DV
     this.phase = 'flying'
     this.reason = null
@@ -187,6 +194,8 @@ export class GameController {
       return this.finish('failed', `ISCO'nun altına düştün (r = ${pod.st.r.toFixed(2)} r₊) — dönüş yok.`)
     if (!end.alive || end.st.r <= isco)
       return this.finish('failed', "Endurance ISCO'ya düştü — çok geç kaldın.")
+    if (pod.st.r > LOST_R)
+      return this.finish('failed', `Diskten savruldun (r = ${pod.st.r.toFixed(1)} r₊) — Endurance geride kaldı.`)
     const sep = pod.pos.distanceTo(end.pos)
     const rel = this.tmpV.copy(pod.vel).sub(end.vel).length()
     if (sep < DOCK_DIST) {
