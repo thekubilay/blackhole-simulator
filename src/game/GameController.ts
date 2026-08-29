@@ -34,6 +34,8 @@ export interface GameHud {
 
 export interface GameSnapshot {
   active: boolean
+  /** brifing ekranı açık: ilk girişte ve oyun içinde ESC/✕ ile (sim duraklar) */
+  briefing: boolean
   phase: GamePhase
   /** ölüm/başarı tek satırı — her son okunabilir olmalı */
   reason: string | null
@@ -58,6 +60,8 @@ export class GameController {
   private engine: GeodesicEngine
   private pod: SimObject | null = null
   private endurance: SimObject | null = null
+  private active = false
+  private briefing = false
   private phase: GamePhase = 'idle'
   private reason: string | null = null
   private fuel = 0
@@ -66,7 +70,7 @@ export class GameController {
   private emitAcc = 0
   private lastPodR: number | null = null
   private vrEma = 0
-  private snap: GameSnapshot = { active: false, phase: 'idle', reason: null, hud: null }
+  private snap: GameSnapshot = { active: false, briefing: false, phase: 'idle', reason: null, hud: null }
   private readonly subs = new Set<() => void>()
   private readonly tmpT = new THREE.Vector3()
   private readonly tmpV = new THREE.Vector3()
@@ -86,36 +90,60 @@ export class GameController {
     return this.endurance ? this.endurance.pos : null
   }
 
+  /** OYNA: önce brifing — oyuncu fiziği okumadan akıntıya atılmaz. */
   enter(): void {
-    if (this.snap.active) return
+    if (this.active) return
+    this.active = true
+    this.briefing = true
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
-    this.startRun()
+    this.publish()
+  }
+
+  /** Brifingden DEVAM ET: ilk kez ise koşuyu başlat, duraklatılmışsa sürdür. */
+  begin(): void {
+    if (!this.active) return
+    this.briefing = false
+    if (this.phase === 'idle') this.startRun()
+    else {
+      this.setPaused(false)
+      this.publish()
+    }
+  }
+
+  /** Oyun içinde ESC/✕: brifing açılır, sim duraklar (dünya donar). */
+  openBriefing(): void {
+    if (!this.active || this.briefing) return
+    this.briefing = true
+    this.setPaused(true)
+    this.publish()
   }
 
   exit(): void {
-    if (!this.snap.active) return
+    if (!this.active) return
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
     this.held.clear()
     this.thrustInput = 0
     this.pod = null
     this.endurance = null
+    this.active = false
+    this.briefing = false
     this.phase = 'idle'
     this.reason = null
-    this.lab.rewind()
+    this.lab.rewind() // duraklatmayı da sıfırlar
     this.publish()
   }
 
   /** Anında yeniden başlatma — menü yok, animasyon yok (R tuşu). */
   restart(): void {
-    if (!this.snap.active) return
+    if (!this.active || this.briefing) return
     this.startRun()
   }
 
   /** Her karede sim adımından ÖNCE çağrılır (öncelik −3): itki + kurallar. */
   tick(delta: number): void {
-    if (!this.snap.active) return
+    if (!this.active || this.briefing) return
     if (this.phase === 'flying') {
       if (this.thrustInput !== 0 && this.fuel > 0) this.applyThrust(this.thrustInput, delta)
       this.evaluate()
@@ -142,9 +170,15 @@ export class GameController {
 
   getSnapshot = (): GameSnapshot => this.snap
 
+  /** Lab'ın duraklatma durumunu hedefe getirir (komut arayüzü toggle'dır). */
+  private setPaused(on: boolean): void {
+    if (this.lab.getSnapshot().paused !== on) this.lab.togglePause()
+  }
+
   private startRun(): void {
     const lab = this.lab
     lab.clear()
+    this.setPaused(false)
     this.engine = PRESETS[lab.getSnapshot().hole.id].engine
     // her denemede rastgele kurulum: ezber yok, okuma becerisi var
     // KURGU (kullanıcının tasarımı): mekik AKINTIDA — disk sürtünmesi onu
@@ -232,7 +266,9 @@ export class GameController {
   private finish(phase: 'docked' | 'failed', reason: string): void {
     this.phase = phase
     this.reason = reason
-    this.publish() // son anında yayın: tek satır sebep + R ile tekrar
+    // dünya donar: son karesi + tek satır sebep — sahne dönmeye devam etmez
+    this.setPaused(true)
+    this.publish()
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
@@ -281,7 +317,8 @@ export class GameController {
       }
     }
     this.snap = {
-      active: this.phase !== 'idle',
+      active: this.active,
+      briefing: this.briefing,
       phase: this.phase,
       reason: this.reason,
       hud,

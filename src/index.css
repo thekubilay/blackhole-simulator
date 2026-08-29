@@ -565,7 +565,7 @@ a:hover {
   pointer-events: auto;
   z-index: 3;
 }
-/* alt-orta kontrol ipucu */
+/* alt-orta koçluk satırı */
 .ui .game-note {
   position: fixed;
   left: 50%;
@@ -573,10 +573,38 @@ a:hover {
   bottom: 14px;
   bottom: calc(14px + env(safe-area-inset-bottom));
   font-size: 10px;
-  color: var(--ink-muted);
+  color: #fff;
   letter-spacing: 0.06em;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
   white-space: nowrap;
+}
+/* görev brifingi: merkez kart — ilk girişte ve ESC/✕ duraklatmasında */
+.ui .game-brief {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, 90vw);
+  max-height: 84vh;
+  overflow-y: auto;
+  padding: 18px 22px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #dccdbd;
+}
+.ui .game-brief p {
+  margin: 0 0 10px;
+}
+.ui .game-brief b {
+  color: #ffd9b3;
+  font-weight: 600;
+}
+.ui .brief-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.ui .brief-actions button {
+  flex: 1;
 }
 /* kenetlenme HUD şeridi: üst-orta, altı değer hücresi */
 .ui .game-hud {

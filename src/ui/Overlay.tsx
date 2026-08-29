@@ -33,15 +33,18 @@ export function Overlay({ controller, game }: { controller: LabController; game:
   const s = useLabSnapshot(controller)
   const g = useGameSnapshot(game)
   const [tab, setTab] = useState<Tab | null>(null)
-  // oyun modunda ESC = lab'a dön
+  // oyun modunda ESC: uçuşta brifingi açar (dünya donar); brifingde veya
+  // oyun sonunda lab'a döner
   useEffect(() => {
     if (!g.active) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') game.exit()
+      if (e.key !== 'Escape') return
+      if (!g.briefing && g.phase === 'flying') game.openBriefing()
+      else game.exit()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [g.active, game])
+  }, [g.active, g.briefing, g.phase, game])
   if (g.active) {
     const h = g.hud
     // oyun görünümü: lab UI'si çekilir — marka + çıkış + kenetlenme HUD'u
@@ -56,10 +59,48 @@ export function Overlay({ controller, game }: { controller: LabController; game:
             {game.pin ? ` · TEST PİNİ: ${game.pin}` : ''}
           </div>
         </div>
-        <button className="icon-btn game-exit" onClick={() => game.exit()} aria-label="Oyundan çık (ESC)">
+        <button
+          className="icon-btn game-exit"
+          onClick={() => (!g.briefing && g.phase === 'flying' ? game.openBriefing() : game.exit())}
+          aria-label={!g.briefing && g.phase === 'flying' ? 'Brifingi aç (ESC)' : 'Oyundan çık'}
+        >
           <i className="fa-regular fa-xmark" aria-hidden="true" />
         </button>
-        {h && g.phase === 'flying' && (
+        {g.briefing && (
+          <div className="game-brief card">
+            <div className="panel-title" style={{ marginBottom: 10 }}>
+              KENETLENME — GÖREV BRİFİNGİ
+            </div>
+            <p>
+              Mekiğin hasarlı: disk plazmasının akıntısına kapıldın ve kara deliğe doğru sürükleniyorsun.
+              Hiçbir şey yapmazsan bir dakika içinde <b>ISCO</b>'yu (son kararlı yörünge) geçersin — oradan
+              dönüş yok. Üstünde, sağlam yörüngede süzülen <b>Endurance</b> tek kurtuluşun: ona tırmanıp
+              kenetleneceksin.
+            </p>
+            <p>
+              <b>Yörüngenin tersliği:</b> derindeki daha hızlı döner. Endurance'dan derinde olduğun için
+              ondan hızlısın — beklersen ara <i>kendiliğinden</i> kapanır; acele edersen her şeyi bozarsın.
+              <b> W</b> ileri itki verir: seni dışarı savurur, <b>tırmanırsın</b> ama açısal olarak
+              yavaşlayıp fazda geri düşersin. <b>S</b> frendir: <b>dalarsın</b> ve daha da hızlanırsın.
+              İkisi de asansör değil — yarıçap saniyeler <i>sonra</i> tepki verir, fazla bastırırsan
+              yörüngen salınır (yükselip geri düşersin). SEN r hücresindeki ↑/↓ oku bu gecikmeyi gösterir.
+            </p>
+            <p>
+              <b>Plan:</b> ① Süzül — ara kapanırken yüksekliğini koru, yakıt harcama. ② Ara 2-3 r₊'ye
+              inince W ile <b>dozlu</b> tırman; hedefe vardığında onun yüksekliğinde ol. ③ Son yaklaşmada
+              kapanma hızını <b>0.008c</b> altına indirip dokun — hızlı temas çarpışmadır. Yakıt sınırlı:
+              her itki bir karar. Alttaki satır sana o an ne yapman gerektiğini fısıldar;
+              <b> R</b> her an yeniden başlatır.
+            </p>
+            <div className="brief-actions">
+              <button className="on" onClick={() => game.begin()}>
+                DEVAM ET
+              </button>
+              <button onClick={() => game.exit()}>ÇIKIŞ</button>
+            </div>
+          </div>
+        )}
+        {!g.briefing && h && g.phase === 'flying' && (
           <div className="game-hud card">
             <div className="gstat">
               <span>MESAFE</span>
@@ -98,12 +139,12 @@ export function Overlay({ controller, game }: { controller: LabController; game:
             </div>
           </div>
         )}
-        {h && g.phase === 'flying' && (
+        {!g.briefing && h && g.phase === 'flying' && (
           <div className="game-note">
             {coachLine(h)} · R yeniden başlat
           </div>
         )}
-        {(g.phase === 'docked' || g.phase === 'failed') && (
+        {!g.briefing && (g.phase === 'docked' || g.phase === 'failed') && (
           <div className="game-msg card">
             <div className={g.phase === 'docked' ? 'g-ok' : 'g-warn'} style={{ fontSize: 13 }}>
               {g.reason}
