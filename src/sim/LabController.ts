@@ -15,6 +15,9 @@ import type { QualityGovernor, QualityLevel } from './QualityGovernor'
 const G_SI = 6.674e-11
 const MSUN_KG = 1.989e30
 
+/** Astronot bırakma şimdilik devre dışı — true yapınca özellik olduğu gibi geri gelir. */
+export const ASTRONAUT_ENABLED = false
+
 const MODE_HINTS: Record<SpawnMode, string> = {
   orbit:
     'Yörünge: cisme tam GR dairesel yörünge koşulu verilir (ISCO dışında kararlı) — ama disk plazması sürtünmesi yörüngeyi yavaşça bozar ve cisim içeri sarmallanır.',
@@ -35,7 +38,7 @@ export class LabController implements LabCommands, SnapshotSource {
   private readonly registry: BodyRegistry
   private readonly presets: Readonly<Record<string, BlackHolePreset>>
   private preset: BlackHolePreset
-  private armed: string | null = 'astro'
+  private armed: string | null = ASTRONAUT_ENABLED ? 'astro' : null
   private mode: SpawnMode = 'orbit'
   private paused = false
   private timeScale = 1
@@ -43,7 +46,9 @@ export class LabController implements LabCommands, SnapshotSource {
   private realistic = false
   private resetSeq = 0
   private fpsCap: 60 | 120 = 60
-  private hint = 'Astronot hazır — bırakmak için disk düzleminde bir noktaya tıkla.'
+  private hint = ASTRONAUT_ENABLED
+    ? 'Astronot hazır — bırakmak için disk düzleminde bir noktaya tıkla.'
+    : 'Sahneyi keşfet — sürükleyerek döndür, tekerlek/iki parmakla yaklaş.'
   private emitAcc = 0
   private snap: LabSnapshot
   private readonly subs = new Set<() => void>()
@@ -99,7 +104,7 @@ export class LabController implements LabCommands, SnapshotSource {
   }
 
   spawnAt = (point: THREE.Vector3): void => {
-    if (!this.armed) return
+    if (!ASTRONAUT_ENABLED || !this.armed) return
     // tek astronot kuralı: sahnede bir cisim varken yenisi bırakılamaz
     if (this.sim.objects.length > 0) {
       this.hint = this.sim.objects.some((o) => o.alive)
@@ -142,6 +147,7 @@ export class LabController implements LabCommands, SnapshotSource {
   }
 
   setArmed(type: string): void {
+    if (!ASTRONAUT_ENABLED) return
     this.armed = this.armed === type ? null : type
     this.hint = this.armed
       ? `${this.registry[this.armed]?.label ?? this.armed} seçildi — bırakmak için sahneye tıkla. (ISCO içi: kararlı yörünge yok)`

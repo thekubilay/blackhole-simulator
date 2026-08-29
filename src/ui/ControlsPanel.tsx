@@ -1,5 +1,6 @@
 // import { BODY_REGISTRY } from '../sim/bodies/registry' // NESNE bölümü şimdilik gizli
 import { PRESETS } from '../physics/presets'
+import { ASTRONAUT_ENABLED } from '../sim/LabController'
 import type { LabCommands, LabSnapshot, SpawnMode } from '../sim/types'
 
 const MODES: [SpawnMode, string][] = [
@@ -42,14 +43,18 @@ export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) 
         ))}
       </div>
       */}
-      <div className="lbl">BAŞLANGIÇ HIZI</div>
-      <div className="seg">
-        {MODES.map(([mode, label]) => (
-          <button key={mode} className={s.mode === mode ? 'on' : ''} onClick={() => lab.setMode(mode)}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {ASTRONAUT_ENABLED && (
+        <>
+          <div className="lbl">BAŞLANGIÇ HIZI</div>
+          <div className="seg">
+            {MODES.map(([mode, label]) => (
+              <button key={mode} className={s.mode === mode ? 'on' : ''} onClick={() => lab.setMode(mode)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       <div className="lbl">ZAMAN HIZI × {s.timeScale.toFixed(1)}</div>
       <input
         type="range"
