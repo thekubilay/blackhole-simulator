@@ -15,6 +15,9 @@ const POV_FALLBACK = new THREE.Vector3(0, CAM_H, 9.5)
 const POV_TARGET = new THREE.Vector3(0, CAM_H, 0)
 const HOLE_CENTER = new THREE.Vector3(0, 0, 0)
 const liftTmp = new THREE.Vector3()
+/** POV serbest bakış: fare merkezden kenara gidince her eksende görüş
+ * alanının bu oranı kadar bakınılır (kullanıcı isteği: her yöne %30) */
+const LOOK_FRAC = 0.3
 
 /**
  * Oyun modunda kamerayı devralır ve POV pozuna yumuşakça taşır. OrbitControls
@@ -30,6 +33,18 @@ export function GameCamera({ game }: { game: GameController }) {
   const look = useRef(new THREE.Vector3())
   const target = useRef(new THREE.Vector3())
   const wasActive = useRef(false)
+  const mouse = useRef({ x: 0, y: 0 }) // hedef bakınma (normalize −1..1)
+  const sway = useRef({ x: 0, y: 0 }) // yumuşatılmış bakınma
+
+  useEffect(() => {
+    if (!active) return undefined
+    const onMove = (e: PointerEvent) => {
+      mouse.current.x = (e.clientX / window.innerWidth) * 2 - 1
+      mouse.current.y = -((e.clientY / window.innerHeight) * 2 - 1)
+    }
+    window.addEventListener('pointermove', onMove)
+    return () => window.removeEventListener('pointermove', onMove)
+  }, [active])
 
   useEffect(() => {
     if (active) {
@@ -68,6 +83,16 @@ export function GameCamera({ game }: { game: GameController }) {
         : (endPos ?? POV_TARGET)
     look.current.lerp(lookGoal, kLook)
     camera.lookAt(look.current)
+    // POV serbest bakış: fare konumuna doğru hafif dönüş (lookAt ÜSTÜNE,
+    // yerel eksenlerde) — çapa ve hedef takibi bozulmaz, bakış esner
+    const kSway = 1 - Math.exp(-6 * delta)
+    sway.current.x += (mouse.current.x - sway.current.x) * kSway
+    sway.current.y += (mouse.current.y - sway.current.y) * kSway
+    const persp = camera as THREE.PerspectiveCamera
+    const halfV = (persp.fov * Math.PI) / 360
+    const halfH = Math.atan(Math.tan(halfV) * persp.aspect)
+    camera.rotateY(-sway.current.x * halfH * LOOK_FRAC)
+    camera.rotateX(sway.current.y * halfV * LOOK_FRAC)
     if (import.meta.env.DEV) {
       ;(window as unknown as Record<string, unknown>).__gameCam = {
         p: camera.position.toArray(),
