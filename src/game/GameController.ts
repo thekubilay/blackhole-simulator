@@ -67,6 +67,14 @@ const DOCK_DIST = 0.45 // temas eşiği (r₊)
 // kenetleniyordu — limit doğal sürüklenmenin ALTINDA olmalı ki fren şart olsun
 const DOCK_SPEED = 0.008 // güvenli temas hız limiti (c)
 const LOST_R = 16 // diskin çok üstü: akıntıdan çıktın ama hedefi de kaçırdın
+/**
+ * Endurance'ın GÖRSEL y-kaldırması (fizik y=0 ekvatoral düzlemde kalır).
+ * Kenetlenme ALTTAN okunmalı (film): istasyon ufkun/bulutun üstünde süzülür,
+ * halkanın alt yüzünü görürüz. Kamerayı düzlem altına indirmek denendi —
+ * "bulutun altı"na düşünce disk üst yarıyı kaplıyor, dünya ters dönüyordu.
+ * Kamera bakışı da bu kadar kaldırılmış noktaya bakar (GameCamera).
+ */
+export const END_VIS_LIFT = 0.5
 
 export class GameController {
   /** aktif ?oyun= test pini — kurulumda kullanılır, UI'de rozet olarak görünür */
@@ -240,6 +248,9 @@ export class GameController {
       'orbit',
       true,
     )
+    // görsel kaldırma model düğümünde: Simulation model.position'a dokunmaz
+    // (yalnız quaternion — spin), fizik pos ve kenetlenme ölçümleri y=0'da
+    this.endurance.model.position.y = END_VIS_LIFT
     this.pod = lab.sim.spawn('pod', this.tmpV.set(rPod, 0, 0), 'orbit', true)
     // POV: kamera bu gövdenin içinde sayılır — modeli kadraja girmesin
     // (kullanıcı kendi mekiğini yanında süzülen ayrı bir araç sandı)

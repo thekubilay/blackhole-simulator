@@ -1,18 +1,20 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
-import type { GameController } from '../game/GameController'
+import { END_VIS_LIFT, type GameController } from '../game/GameController'
 import { useGameSnapshot } from '../hooks/useGameSnapshot'
 
 // Kamera pod'un jeodezik konumuna çapalanır (CAM_H üstünde) ve KENETLENME
-// HEDEFİNE bakar: Endurance önde-üstte olduğundan bakış kabaca prograd —
-// delik iç kenardan kadraja girer ve battıkça büyür (tehdit çevresel görüşte),
-// final yaklaşmada istasyon ekranı doldurur. Ders: deliğe bakan kamera hedefi
-// ASLA gösteremiyordu (hedef yakınken hep arkada, uzakken karşı yakada benek).
+// HEDEFİNİN GÖRSELİNE bakar: Endurance modeli END_VIS_LIFT kadar yukarı
+// kaldırılmıştır — istasyon ufkun üstünde süzülür, halkanın ALT yüzünü
+// görürüz (alttan kenetlenme, film gibi). Ders 1: deliğe bakan kamera
+// hedefi asla gösteremiyordu. Ders 2: kamerayı düzlemin ALTINA indirmek
+// (CAM_H<0) "bulutun altı" demek — disk üst yarıyı kaplıyor, dünya ters.
 const CAM_H = 0.3
 const POV_FALLBACK = new THREE.Vector3(0, CAM_H, 9.5)
 const POV_TARGET = new THREE.Vector3(0, CAM_H, 0)
 const HOLE_CENTER = new THREE.Vector3(0, 0, 0)
+const liftTmp = new THREE.Vector3()
 
 /**
  * Oyun modunda kamerayı devralır ve POV pozuna yumuşakça taşır. OrbitControls
@@ -59,7 +61,12 @@ export function GameCamera({ game }: { game: GameController }) {
     const kPos = 1 - Math.exp(-8 * delta)
     const kLook = 1 - Math.exp(-12 * delta)
     camera.position.lerp(target.current, kPos)
-    look.current.lerp(endPos ?? POV_TARGET, kLook)
+    // bakış istasyonun GÖRSEL konumuna (kaldırılmış); plonjonda delik merkezi
+    const lookGoal =
+      endPos && phase !== 'dying'
+        ? liftTmp.set(endPos.x, endPos.y + END_VIS_LIFT, endPos.z)
+        : (endPos ?? POV_TARGET)
+    look.current.lerp(lookGoal, kLook)
     camera.lookAt(look.current)
     if (import.meta.env.DEV) {
       ;(window as unknown as Record<string, unknown>).__gameCam = {

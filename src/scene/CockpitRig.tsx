@@ -283,6 +283,38 @@ function buildRig(): Rig {
     if (merged) deck.add(new THREE.Mesh(merged, m))
   }
 
+  // ── kanopi çerçevesi (KÖK uzayda, kamera-yerel — güverte eğiminden
+  // bağımsız): kullanıcı eskizi — eşik tüm genişlikte konsolun arkasında
+  // yükselir (~%24), ortada trapez çıkıntı (~%33), kenarlarda yukarı
+  // daralan yan dikmeler. Konsol katmanı eşiğin ÖNÜNDE kalır (derinlik).
+  const frameDark: THREE.BufferGeometry[] = []
+  const frameHouse: THREE.BufferGeometry[] = []
+  const frameTrim: THREE.BufferGeometry[] = []
+  // eşik plakası (üstü hafif geriye yatık) + orta trapez + pahları
+  addBox(frameHouse, 3.2, 0.24, 0.06, mat(0, -0.375, -1.13, -0.3))
+  addBox(frameHouse, 0.85, 0.1, 0.08, mat(0, -0.245, -1.115, -0.3))
+  addBox(frameHouse, 0.14, 0.1, 0.08, mat(-0.47, -0.26, -1.115, -0.3, 0, 0.5))
+  addBox(frameHouse, 0.14, 0.1, 0.08, mat(0.47, -0.26, -1.115, -0.3, 0, -0.5))
+  // eşik sırtı (kesintisiz) + trapez sırtı pervazları
+  addBox(frameTrim, 3.2, 0.024, 0.06, mat(0, -0.262, -1.125, -0.3))
+  addBox(frameTrim, 0.87, 0.022, 0.09, mat(0, -0.198, -1.115, -0.3))
+  // yan dikmeler: ince, koyu, ekranın ~%40'ında pervaz kapaklı biter
+  // (ilk deneme: 0.3 genişlik + tavana kadar = parlak turuncu kuleler)
+  for (const sx of [-1, 1]) {
+    addBox(frameDark, 0.17, 0.72, 0.07, mat(sx * 0.99, -0.26, -1.05, 0, sx * 0.22, sx * 0.16))
+    addBox(frameTrim, 0.022, 0.72, 0.075, mat(sx * 0.907, -0.246, -1.068, 0, sx * 0.22, sx * 0.16))
+    addBox(frameTrim, 0.19, 0.025, 0.075, mat(sx * 0.935, 0.093, -1.062, 0, sx * 0.22, sx * 0.16))
+    for (const hy of [-0.12, -0.34]) addBox(frameDark, 0.04, 0.045, 0.05, mat(sx * 0.93, hy, -1.02, 0, sx * 0.22, 0))
+  }
+  for (const [list, m] of [
+    [frameDark, matDark],
+    [frameHouse, matHousing],
+    [frameTrim, matTrim],
+  ] as const) {
+    const merged = mergeGeometries(list)
+    if (merged) root.add(new THREE.Mesh(merged, m))
+  }
+
   // LED noktaları (sabit; emissive okunaklılık için basic malzeme)
   const ledGeo = (xs: number[], color: number): void => {
     const g: THREE.BufferGeometry[] = []
