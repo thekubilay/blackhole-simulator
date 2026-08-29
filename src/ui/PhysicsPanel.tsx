@@ -98,8 +98,9 @@ export function PhysicsPanel() {
         jeodezik durumdan (r, u<sub>r</sub>, L, E) türetilir. FPS düşerse çözünürlük ve ışın adımı kademeli iner
         ama masaüstünde <b>kalite tabanının</b> (tam çözünürlük, 150 adım) altına asla inmez — dokunmatik
         cihazlarda bir acil kademe daha vardır (0.75×, 110 adım); az bükülen uzak ışınlar analitik
-        çizilir, dithering bantlaşmayı siler. 60 fps sınırı ve gizli sekmede 10 fps ile GPU uzun oturumda serin
-        kalır; silinen her cismin geometri/doku belleği anında boşaltılır.
+        çizilir, dithering bantlaşmayı siler. Kare tavanı varsayılan 60 fps'tir (GPU uzun oturumda serin
+        kalır; ProMotion ekranlar için HUD'dan 120 seçilebilir), gizli sekmede 10'a iner; silinen her
+        cismin geometri/doku belleği anında boşaltılır.
       </div>
     </>
   )

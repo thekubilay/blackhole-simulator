@@ -24,12 +24,15 @@ export default function App() {
   const { controller, governor } = useMemo(() => {
     // ?kalite=yuksek|orta|dusuk|mobil → governor sabitlenir (test/ölçüm aracı)
     const ASCII: Record<string, string> = { yuksek: 'yüksek', dusuk: 'düşük' }
-    const q = new URLSearchParams(window.location.search).get('kalite')
+    const params = new URLSearchParams(window.location.search)
+    const q = params.get('kalite')
     const pin = q ? (ASCII[q] ?? q) : undefined
     const governor = new QualityGovernor(window.devicePixelRatio, coarsePointer, pin)
     const initial = PRESETS[DEFAULT_PRESET_ID]
     const sim = new Simulation(initial.engine, BODY_REGISTRY, initial.profile)
-    const controller = new LabController(sim, governor, BODY_REGISTRY, PRESETS, DEFAULT_PRESET_ID)
+    // ?fps=120 → kare tavanı pinli başlar (test/ölçüm; HUD'dan da değişir)
+    const fpsCap = params.get('fps') === '120' ? 120 : 60
+    const controller = new LabController(sim, governor, BODY_REGISTRY, PRESETS, DEFAULT_PRESET_ID, fpsCap)
     return { controller, governor }
   }, [])
   return (
@@ -41,7 +44,7 @@ export default function App() {
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         camera={{ fov: 55, near: 0.05, far: 300, position: [2.2, 1.15, 13.2] }}
       >
-        <FrameLoopDriver />
+        <FrameLoopDriver controller={controller} />
         <QualityManager governor={governor} />
         <OrbitControls makeDefault enableDamping dampingFactor={0.06} minDistance={3} maxDistance={42} enablePan={false} />
         <CameraRewind controller={controller} />

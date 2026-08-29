@@ -42,6 +42,7 @@ export class LabController implements LabCommands, SnapshotSource {
   private focus: SimObject | null = null
   private realistic = false
   private resetSeq = 0
+  private fpsCap: 60 | 120 = 60
   private hint = 'Astronot hazır — bırakmak için disk düzleminde bir noktaya tıkla.'
   private emitAcc = 0
   private snap: LabSnapshot
@@ -53,13 +54,30 @@ export class LabController implements LabCommands, SnapshotSource {
     registry: BodyRegistry,
     presets: Readonly<Record<string, BlackHolePreset>>,
     initialPresetId: string,
+    initialFpsCap: 60 | 120 = 60,
   ) {
     this.sim = sim
     this.governor = governor
     this.registry = registry
     this.presets = presets
     this.preset = presets[initialPresetId]
+    this.fpsCap = initialFpsCap
     this.snap = this.buildSnapshot()
+  }
+
+  /** Kare döngüsünün canlı okuduğu tavan (FrameLoopDriver). */
+  get frameCap(): number {
+    return this.fpsCap
+  }
+
+  setFpsCap(cap: 60 | 120): void {
+    if (cap === this.fpsCap) return
+    this.fpsCap = cap
+    this.hint =
+      cap === 120
+        ? '120 fps tavanı: ProMotion ekranda gözle görülür akıcılık — GPU işi ~2 katına çıkar, 60 Hz ekranda fark yaratmaz (vsync).'
+        : '60 fps tavanı: GPU uzun oturumda serin ve sessiz kalır (varsayılan).'
+    this.publish()
   }
 
   /** Her karede R3F döngüsünden çağrılır. */
@@ -240,6 +258,7 @@ export class LabController implements LabCommands, SnapshotSource {
       },
       realistic: this.realistic,
       resetSeq: this.resetSeq,
+      fpsCap: this.fpsCap,
     }
   }
 }

@@ -1,14 +1,15 @@
 import { useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
+import type { LabController } from '../sim/LabController'
 
-const FRAME_MIN_MS = 15.5 // sabit 60 fps sınırı
 const HIDDEN_INTERVAL_MS = 100 // gizli sekmede 10 fps
 
 /**
  * Kare döngüsü (SRP): Canvas frameloop="never" iken advance() ile sürer.
- * 60 fps sınırı ve gizli sekmede düşük güç modu — GPU uzun oturumda serin kalır.
+ * Kare tavanı controller'dan CANLI okunur: 60 (varsayılan, GPU serin) veya
+ * 120 (ProMotion). Gizli sekmede düşük güç modu.
  */
-export function FrameLoopDriver() {
+export function FrameLoopDriver({ controller }: { controller: LabController }) {
   const advance = useThree((s) => s.advance)
   useEffect(() => {
     let raf = 0
@@ -29,7 +30,9 @@ export function FrameLoopDriver() {
         return
       }
       hiddenTimer = null
-      if (now - lastRender >= FRAME_MIN_MS) {
+      // eşik = kare süresinin ~%93'ü: vsync zamanlamasındaki titreme kareyi
+      // yanlışlıkla atlatmasın (60 → 15.5 ms, 120 → 7.75 ms)
+      if (now - lastRender >= 930 / controller.frameCap) {
         lastRender = now
         advance(now / 1000)
       }
@@ -51,6 +54,6 @@ export function FrameLoopDriver() {
       if (hiddenTimer !== null) clearTimeout(hiddenTimer)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [advance])
+  }, [advance, controller])
   return null
 }

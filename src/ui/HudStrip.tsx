@@ -34,11 +34,23 @@ export function HudStrip({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
           <div className="card controls-dialog">
             <div className="panel-title">FPS — KARE HIZI</div>
             <div className="body" style={{ marginTop: 8 }}>
-              Saniyede çizilen kare sayısı. Döngü <b>60 fps ile sınırlıdır</b> (GPU uzun oturumda serin
-              kalır), gizli sekmede 10'a iner. FPS düşerse kalite yöneticisi çözünürlüğü ve ışın adımını
-              kademeli düşürür; KALİTE hücresinden elle de seçebilirsiniz. Tarayıcı kareleri ekran
-              tazelemesine (vsync) hizaladığı için değer 60'ın tam bölenlerinde (30, 20, 15…) takılı
-              görünebilir.
+              Saniyede çizilen kare sayısı. Gizli sekmede 10'a iner; FPS düşerse kalite yöneticisi
+              çözünürlüğü ve ışın adımını kademeli düşürür (KALİTE hücresinden elle de seçilir).
+              Tarayıcı kareleri ekran tazelemesine (vsync) hizaladığı için değer tavanın tam
+              bölenlerinde takılı görünebilir.
+            </div>
+            <div className="lbl">KARE TAVANI</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
+              <button className={s.fpsCap === 60 ? 'on' : ''} onClick={() => lab.setFpsCap(60)}>
+                60 fps — serin ve sessiz (varsayılan)
+              </button>
+              <button className={s.fpsCap === 120 ? 'on' : ''} onClick={() => lab.setFpsCap(120)}>
+                120 fps — ProMotion akıcılığı
+              </button>
+            </div>
+            <div className="body" style={{ marginTop: 8 }}>
+              120, yalnız yüksek tazelemeli ekranlarda (ProMotion vb.) fark yaratır — 60 Hz ekranda
+              vsync zaten 60'ta tutar. GPU işi yaklaşık iki katına çıkar.
             </div>
           </div>
         </Dialog>

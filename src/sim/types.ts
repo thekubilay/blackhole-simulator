@@ -65,6 +65,8 @@ export interface LabSnapshot {
   realistic: boolean
   /** her "başa sar"da artar — sahne bileşenleri (kamera) bunu izleyip sıfırlanır */
   resetSeq: number
+  /** kare tavanı: 60 (serin, varsayılan) | 120 (ProMotion akıcılığı) */
+  fpsCap: 60 | 120
 }
 
 /** ISP: UI'nin komut tarafı — durum okumadan ayrı. */
@@ -84,6 +86,8 @@ export interface LabCommands {
   setQuality(label: string | null): void
   /** bu cihazda kullanılabilir kalite seviyeleri (HUD kalite menüsü) */
   qualityOptions(): readonly QualityLevel[]
+  /** kare tavanı: 60 = serin/sessiz, 120 = ProMotion ekranda akıcı */
+  setFpsCap(cap: 60 | 120): void
 }
 
 /** ISP: UI'nin okuma tarafı — useSyncExternalStore sözleşmesi. */
