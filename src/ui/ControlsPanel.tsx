@@ -14,11 +14,12 @@ export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) 
   const [open, setOpen] = useState(false)
   return (
     <>
-      {/* logo: her zaman görünür */}
+      {/* logo + seçili delik adı: her zaman görünür */}
       <div className="brand">
         <div className="title">
           KARA DELİK <span className="thin">LAB.</span>
         </div>
+        <div className="brand-sub">{s.hole.name}</div>
       </div>
       {/* sol alt köşe araçları: kontrol dialogu aç/kapa + tam başa sarma */}
       <div className="corner-tools">
