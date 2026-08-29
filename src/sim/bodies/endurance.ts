@@ -110,6 +110,7 @@ export function makeEndurance(): BodyBuild {
   g.scale.setScalar(1.5)
   const w = new THREE.Group()
   w.add(g)
-  // filmdeki tempoya yakın belirgin bir dönüş; M3'te faz eşlemenin hedefi
-  return { group: w, size: 0.3, spinAxis: new THREE.Vector3(0, 1, 0), spinRate: 0.55 }
+  // belirgin ama aceleci olmayan dönüş (0.55 çok hızlıydı); M3'te faz
+  // eşlemenin hedefi
+  return { group: w, size: 0.3, spinAxis: new THREE.Vector3(0, 1, 0), spinRate: 0.4 }
 }
