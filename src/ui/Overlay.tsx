@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { LabController } from '../sim/LabController'
+import type { GameController } from '../game/GameController'
 import { useLabSnapshot } from '../hooks/useLabSnapshot'
+import { useGameSnapshot } from '../hooks/useGameSnapshot'
 import { HudStrip } from './HudStrip'
 import { ControlsPanel } from './ControlsPanel'
 import { TelemetryPanel } from './TelemetryPanel'
@@ -10,9 +12,36 @@ import { Dialog } from './Dialog'
 
 type Tab = 'genel' | 'fizik' | 'kuantum'
 
-export function Overlay({ controller }: { controller: LabController }) {
+export function Overlay({ controller, game }: { controller: LabController; game: GameController }) {
   const s = useLabSnapshot(controller)
+  const g = useGameSnapshot(game)
   const [tab, setTab] = useState<Tab | null>(null)
+  // oyun modunda ESC = lab'a dön
+  useEffect(() => {
+    if (!g.active) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') game.exit()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [g.active, game])
+  if (g.active) {
+    // oyun görünümü: lab UI'si tamamen çekilir, sadece marka + çıkış kalır
+    return (
+      <div className="ui">
+        <div className="brand">
+          <div className="title">
+            KARA DELİK <span className="thin">LAB.</span>
+          </div>
+          <div className="brand-sub">KENETLENME · {s.hole.name}</div>
+        </div>
+        <button className="icon-btn game-exit" onClick={() => game.exit()} aria-label="Oyundan çık (ESC)">
+          <i className="fa-regular fa-xmark" aria-hidden="true" />
+        </button>
+        <div className="game-note">iskelet sürüm — itki, yakıt ve Endurance sonraki adımda</div>
+      </div>
+    )
+  }
   return (
     <div className="ui">
       <HudStrip s={s} lab={controller} />
@@ -66,6 +95,14 @@ export function Overlay({ controller }: { controller: LabController }) {
             </div>
           </div>
         </Dialog>
+      )}
+      {!s.busy && !tab && (
+        <button className="play-btn" onClick={() => game.enter()}>
+          <span key="play" style={{ display: 'contents' }}>
+            <i className="fa-regular fa-play" aria-hidden="true" />
+          </span>
+          OYNA
+        </button>
       )}
       <TelemetryPanel s={s} lab={controller} />
       <div className="footnote">

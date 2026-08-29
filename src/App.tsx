@@ -7,7 +7,9 @@ import { BODY_REGISTRY } from './sim/bodies/registry'
 import { Simulation } from './sim/Simulation'
 import { QualityGovernor } from './sim/QualityGovernor'
 import { LabController } from './sim/LabController'
+import { GameController } from './game/GameController'
 import { CameraRewind } from './scene/CameraRewind'
+import { GameCamera } from './scene/GameCamera'
 import { FrameLoopDriver } from './scene/FrameLoopDriver'
 import { QualityManager } from './scene/QualityManager'
 import { LensedBackground } from './scene/LensedBackground'
@@ -16,12 +18,13 @@ import { Lights } from './scene/Lights'
 import { SimulationLayer } from './scene/SimulationLayer'
 import { SpawnPlane } from './scene/SpawnPlane'
 import { Overlay } from './ui/Overlay'
+import { useGameSnapshot } from './hooks/useGameSnapshot'
 
 /** Kompozisyon kökü: bağımlılıklar burada kurulur ve enjekte edilir (DIP). */
 export default function App() {
   const coarsePointer = useMedia('(pointer: coarse)')
   // deps boş: simülasyon bir kez kurulur, kuruluştaki işaretçi türü kullanılır
-  const { controller, governor } = useMemo(() => {
+  const { controller, governor, game } = useMemo(() => {
     // ?kalite=yuksek|orta|dusuk|mobil → governor sabitlenir (test/ölçüm aracı)
     const ASCII: Record<string, string> = { yuksek: 'yüksek', dusuk: 'düşük' }
     const params = new URLSearchParams(window.location.search)
@@ -33,8 +36,11 @@ export default function App() {
     // ?fps=120 → kare tavanı pinli başlar (test/ölçüm; HUD'dan da değişir)
     const fpsCap = params.get('fps') === '120' ? 120 : 60
     const controller = new LabController(sim, governor, BODY_REGISTRY, PRESETS, DEFAULT_PRESET_ID, fpsCap)
-    return { controller, governor }
+    const game = new GameController()
+    return { controller, governor, game }
   }, [])
+  // oyun modunda serbest kamera kapanır; GameCamera devralır
+  const gameActive = useGameSnapshot(game).active
   return (
     <>
       <Canvas
@@ -46,15 +52,24 @@ export default function App() {
       >
         <FrameLoopDriver controller={controller} />
         <QualityManager governor={governor} />
-        <OrbitControls makeDefault enableDamping dampingFactor={0.06} minDistance={3} maxDistance={42} enablePan={false} />
+        <OrbitControls
+          makeDefault
+          enabled={!gameActive}
+          enableDamping
+          dampingFactor={0.06}
+          minDistance={3}
+          maxDistance={42}
+          enablePan={false}
+        />
         <CameraRewind controller={controller} />
+        <GameCamera game={game} />
         <LensedBackground controller={controller} governor={governor} />
         <HorizonOccluders />
         <Lights />
         <SimulationLayer controller={controller} />
         <SpawnPlane onSpawn={controller.spawnAt} />
       </Canvas>
-      <Overlay controller={controller} />
+      <Overlay controller={controller} game={game} />
     </>
   )
 }

@@ -523,6 +523,60 @@ a:hover {
   color: #6b6055;
   letter-spacing: 0.04em;
 }
+/* ── kenetlenme oyunu ──────────────────────────────────────────── */
+/* alt-orta PLAY butonu: lab modunda, sahne boşken görünür */
+.ui .play-btn {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 20px;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 26px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  color: #ffd9b3;
+  background: var(--card-bg);
+  backdrop-filter: blur(10px);
+  border-color: var(--amber-line-strong);
+  pointer-events: auto;
+  z-index: 3;
+}
+.ui .play-btn:hover {
+  background: linear-gradient(180deg, #ffaa63, #f98b3c);
+  color: #241105;
+  border-color: transparent;
+  box-shadow: 0 6px 22px -6px rgba(255, 154, 77, 0.5);
+}
+.ui .play-btn i {
+  font-size: 11px;
+}
+/* oyun modunda sağ üst çıkış */
+.ui .game-exit {
+  position: fixed;
+  top: 14px;
+  top: max(14px, env(safe-area-inset-top));
+  right: 16px;
+  right: max(16px, env(safe-area-inset-right));
+  pointer-events: auto;
+  z-index: 3;
+}
+/* geçici iskelet notu — oynanış geldikçe kalkacak */
+.ui .game-note {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  font-size: 10px;
+  color: var(--ink-muted);
+  letter-spacing: 0.06em;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+}
 /* ── dokunmatik cihazlar: parmak hedefleri ─────────────────────── */
 @media (pointer: coarse) {
   .ui button {
