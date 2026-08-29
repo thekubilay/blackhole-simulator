@@ -40,17 +40,6 @@ export function Overlay({ controller }: { controller: LabController }) {
           <i className="fa-regular fa-arrow-rotate-right" aria-hidden="true" />
         </button>
       </div>
-      {/* sağ üst kısayollar: aynı dialogu ilgili sekmede açar */}
-      <div className="dock">
-        <div className="dock-toggles">
-          <button className="card" style={{ padding: '8px 14px', letterSpacing: '.14em' }} onClick={() => setTab('fizik')}>
-            FİZİK PANELİ
-          </button>
-          <button className="card" style={{ padding: '8px 14px', letterSpacing: '.14em' }} onClick={() => setTab('kuantum')}>
-            KUANTUM
-          </button>
-        </div>
-      </div>
       {tab && (
         <Dialog onClose={() => setTab(null)} width="min(620px, 100%)">
           <div className="card panel">

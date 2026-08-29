@@ -289,23 +289,6 @@ a:hover {
   color: var(--ink);
   margin-top: 2px;
 }
-/* sağ üst: panel dialoglarını açan butonlar (paneller merkez dialogda açılır) */
-.dock {
-  position: fixed;
-  right: 16px;
-  right: max(16px, env(safe-area-inset-right));
-  top: 72px;
-  pointer-events: none;
-  z-index: 4;
-}
-.dock-toggles {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-.dock-toggles button {
-  pointer-events: auto;
-}
 .panel {
   overflow: hidden;
   min-height: 0;
@@ -595,10 +578,6 @@ a:hover {
   }
   .hud .stat {
     min-width: 0;
-  }
-  .dock {
-    top: calc(max(10px, env(safe-area-inset-top)) + 52px);
-    right: 12px;
   }
   .telemetry {
     /* sol alttaki köşe araçlarına yer bırakılır */
