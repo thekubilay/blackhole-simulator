@@ -80,8 +80,12 @@ void sampleDisk(vec3 hp, vec3 vn, inout vec4 acc){
   float shift = dop * gfac;                 // toplam g = ν_gözlenen/ν_yayılan
   // Sanatsal: δ^(3.6)·√f (mevcut görünüm). Gerçekçi: bolometrik I ∝ g⁴ —
   // yaklaşan taraf kat kat parlak, iç kenar kütleçekimsel kaymayla SÖNÜK
+  // gerçekçi pozlama düşük tutulur: yoksa her iki yan da ton eşlemede beyaza
+  // kırpılır ve g⁴'ün ~20× asimetrisi görünmez olur (Luminet 1979 kontrastı)
   float boostA = pow(dop, 3.6) * gfac;
-  float boostR = 0.8 * pow(shift, 4.0);
+  // 2.35/uDiskIn: pozlama deliğe normalize (uç spinde ISCO'ya bağlı emisyon
+  // profili tüm kareyi karartmasın) — fizik değil, kamera pozlaması
+  float boostR = 0.16 * (2.35/uDiskIn) * pow(shift, 4.0);
   E *= mix(boostA, boostR, uRealism);
   // Sanatsal renk: altın palet + belirgin Doppler mavi/kızıl ayrımı
   vec3 cA = diskRamp(rr);
