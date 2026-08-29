@@ -565,17 +565,17 @@ a:hover {
   pointer-events: auto;
   z-index: 3;
 }
-/* alt-orta koçluk satırı */
+/* koçluk satırı: üst-orta HUD kartının hemen altında */
 .ui .game-note {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 14px;
-  bottom: calc(14px + env(safe-area-inset-bottom));
+  top: calc(max(14px, env(safe-area-inset-top)) + 64px);
   font-size: 10px;
   color: #fff;
   letter-spacing: 0.06em;
   white-space: nowrap;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
 }
 /* görev brifingi: merkez kart — ilk girişte ve ESC/✕ duraklatmasında */
 .ui .game-brief {
