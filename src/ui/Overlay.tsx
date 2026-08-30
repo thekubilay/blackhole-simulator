@@ -10,6 +10,8 @@ import { TelemetryPanel } from './TelemetryPanel'
 import { PhysicsPanel } from './PhysicsPanel'
 import { QuantumPanel } from './QuantumPanel'
 import { Dialog } from './Dialog'
+import { TouchThrust } from './TouchThrust'
+import { useTouchUi } from './touch'
 
 type Tab = 'delikler' | 'genel' | 'fizik' | 'kuantum'
 
@@ -33,6 +35,7 @@ function coachLine(h: { sep: number; closure: number; podR: number; endR: number
 export function Overlay({ controller, game }: { controller: LabController; game: GameController }) {
   const s = useLabSnapshot(controller)
   const g = useGameSnapshot(game)
+  const touch = useTouchUi()
   const [tab, setTab] = useState<Tab | null>(null)
   // oyun modunda ESC: uçuşta brifingi açar (dünya donar); brifingde veya
   // oyun sonunda lab'a döner
@@ -72,33 +75,46 @@ export function Overlay({ controller, game }: { controller: LabController; game:
             <div className="panel-title" style={{ marginBottom: 10 }}>
               KENETLENME — GÖREV BRİFİNGİ
             </div>
-            <p>
-              Mekiğin hasarlı: disk plazmasının akıntısına kapıldın ve kara deliğe doğru sürükleniyorsun.
-              Hiçbir şey yapmazsan bir dakika içinde <b>ISCO</b>'yu (son kararlı yörünge) geçersin — oradan
-              dönüş yok. Üstünde, sağlam yörüngede süzülen <b>Endurance</b> tek kurtuluşun: ona tırmanıp
-              kenetleneceksin.
-            </p>
-            <p>
-              <b>Yörüngenin tersliği:</b> derindeki daha hızlı döner. Endurance'dan derinde olduğun için
-              ondan hızlısın — beklersen ara <i>kendiliğinden</i> kapanır; acele edersen her şeyi bozarsın.
-              <kbd className="key">W</kbd> ileri itki verir: seni dışarı savurur, <b>tırmanırsın</b> ama
-              açısal olarak yavaşlayıp fazda geri düşersin. <kbd className="key">S</kbd> frendir:{' '}
-              <b>dalarsın</b> ve daha da hızlanırsın. İkisi de asansör değil — yarıçap saniyeler{' '}
-              <i>sonra</i> tepki verir, fazla bastırırsan yörüngen salınır (yükselip geri düşersin).
-              SEN r hücresindeki ↑/↓ oku bu gecikmeyi gösterir.
-            </p>
-            <p>
-              <b>Plan:</b>
-              <br />① Süzül — ara kapanırken yüksekliğini koru, yakıt harcama.
-              <br />② Ara 2-3 r₊'ye inince <kbd className="key">W</kbd> ile <b>dozlu</b> tırman; hedefe
-              vardığında onun yüksekliğinde ol.
-              <br />③ Son yaklaşmada kapanma hızını <b>0.008c</b> altına indirip dokun — hızlı temas
-              çarpışmadır.
-            </p>
-            <p>
-              Yakıt sınırlı: her itki bir karar. Alttaki satır sana o an ne yapman gerektiğini fısıldar;{' '}
-              <kbd className="key">R</kbd> her an yeniden başlatır.
-            </p>
+            {/* yalnız metin kayar: kısa yatay ekranda DEVAM ET katlanın altında
+                kalıyor, oyun kilitlenmiş gibi görünüyordu */}
+            <div className="brief-body">
+              <p>
+                Mekiğin hasarlı: disk plazmasının akıntısına kapıldın ve kara deliğe doğru
+                sürükleniyorsun. Hiçbir şey yapmazsan bir dakika içinde <b>ISCO</b>'yu (son kararlı
+                yörünge) geçersin — oradan dönüş yok. Üstünde, sağlam yörüngede süzülen{' '}
+                <b>Endurance</b> tek kurtuluşun: ona tırmanıp kenetleneceksin.
+              </p>
+              <p>
+                <b>Yörüngenin tersliği:</b> derindeki daha hızlı döner. Endurance'dan derinde olduğun
+                için ondan hızlısın — beklersen ara <i>kendiliğinden</i> kapanır; acele edersen her şeyi
+                bozarsın. <kbd className="key">W</kbd> ileri itki verir: seni dışarı savurur,{' '}
+                <b>tırmanırsın</b> ama açısal olarak yavaşlayıp fazda geri düşersin.{' '}
+                <kbd className="key">S</kbd> frendir: <b>dalarsın</b> ve daha da hızlanırsın. İkisi de
+                asansör değil — yarıçap saniyeler <i>sonra</i> tepki verir, fazla bastırırsan yörüngen
+                salınır (yükselip geri düşersin). SEN r hücresindeki ↑/↓ oku bu gecikmeyi gösterir.
+              </p>
+              <p>
+                <b>Plan:</b>
+                <br />① Süzül — ara kapanırken yüksekliğini koru, yakıt harcama.
+                <br />② Ara 2-3 r₊'ye inince <kbd className="key">W</kbd> ile <b>dozlu</b> tırman;
+                hedefe vardığında onun yüksekliğinde ol.
+                <br />③ Son yaklaşmada kapanma hızını <b>0.008c</b> altına indirip dokun — hızlı temas
+                çarpışmadır.
+              </p>
+              {touch ? (
+                <p>
+                  <b>Mobil kontrol:</b> ekranın <b>SAĞ</b> yarısına basılı tut ={' '}
+                  <kbd className="key">W</kbd> (tırman), <b>SOL</b> yarısına basılı tut ={' '}
+                  <kbd className="key">S</kbd> (dal). Parmağını kaldırınca itki kesilir. Yakıt sınırlı:
+                  her itki bir karar. Alttaki satır sana o an ne yapman gerektiğini fısıldar.
+                </p>
+              ) : (
+                <p>
+                  Yakıt sınırlı: her itki bir karar. Alttaki satır sana o an ne yapman gerektiğini
+                  fısıldar; <kbd className="key">R</kbd> her an yeniden başlatır.
+                </p>
+              )}
+            </div>
             <div className="brief-actions">
               <button className="on" onClick={() => game.begin()}>
                 DEVAM ET
@@ -148,9 +164,12 @@ export function Overlay({ controller, game }: { controller: LabController; game:
         )}
         {!g.briefing && h && g.phase === 'flying' && (
           <div className="game-note">
-            {coachLine(h)} · R yeniden başlat
+            {coachLine(h)}
+            {touch ? '' : ' · R yeniden başlat'}
           </div>
         )}
+        {/* mobil kontrol: sol yarı S, sağ yarı W — yalnız uçuş fazında */}
+        {touch && !g.briefing && g.phase === 'flying' && <TouchThrust game={game} />}
         {!g.briefing && (g.phase === 'docked' || g.phase === 'failed') && (
           <div className="game-msg card">
             <div className={`end-title ${g.phase === 'docked' ? 'end-ok' : 'end-fail'}`}>{g.title}</div>
@@ -182,11 +201,22 @@ export function Overlay({ controller, game }: { controller: LabController; game:
               <div className="end-tease">{g.stats.minSep.toFixed(2)} r₊'ye kadar yaklaşmıştın — az kalmıştı.</div>
             )}
             <div className="brief-actions">
+              {/* tuş çipleri yalnız klavyeli cihazda: telefonda R/ESC yok */}
               <button className="on" onClick={() => game.restart()}>
-                YENİDEN DENE&nbsp;<kbd className="key">R</kbd>
+                YENİDEN DENE
+                {touch ? null : (
+                  <>
+                    &nbsp;<kbd className="key">R</kbd>
+                  </>
+                )}
               </button>
               <button onClick={() => game.exit()}>
-                LAB'A DÖN&nbsp;<kbd className="key">ESC</kbd>
+                LAB'A DÖN
+                {touch ? null : (
+                  <>
+                    &nbsp;<kbd className="key">ESC</kbd>
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -97,6 +97,8 @@ export class GameController {
   private fuel = 0
   private thrustInput: -1 | 0 | 1 = 0
   private readonly held = new Set<string>()
+  /** dokunmatik yarı-ekran girişi (mobil): −1 sol/S, +1 sağ/W */
+  private touchThrust: -1 | 0 | 1 = 0
   private emitAcc = 0
   private dyingT = 0
   private lastPodR: number | null = null
@@ -168,6 +170,7 @@ export class GameController {
     window.removeEventListener('keydown', this.onKeyDown)
     window.removeEventListener('keyup', this.onKeyUp)
     this.held.clear()
+    this.touchThrust = 0
     this.thrustInput = 0
     this.pod = null
     this.endurance = null
@@ -363,6 +366,7 @@ export class GameController {
     this.stats = this.buildStats(null)
     this.thrustInput = 0
     this.held.clear()
+    this.touchThrust = 0
     this.publish()
   }
 
@@ -392,9 +396,15 @@ export class GameController {
     this.syncThrust()
   }
 
+  /** Mobil kontrol (TouchThrust): ekranın sağ yarısı = W, sol yarısı = S. */
+  setTouchThrust(dir: -1 | 0 | 1): void {
+    this.touchThrust = dir
+    this.syncThrust()
+  }
+
   private syncThrust(): void {
-    const fwd = this.held.has('w') || this.held.has('arrowup')
-    const back = this.held.has('s') || this.held.has('arrowdown')
+    const fwd = this.held.has('w') || this.held.has('arrowup') || this.touchThrust === 1
+    const back = this.held.has('s') || this.held.has('arrowdown') || this.touchThrust === -1
     this.thrustInput = fwd === back ? 0 : fwd ? 1 : -1
   }
 

@@ -19,6 +19,7 @@ import { Lights } from './scene/Lights'
 import { SimulationLayer } from './scene/SimulationLayer'
 import { SpawnPlane } from './scene/SpawnPlane'
 import { Overlay } from './ui/Overlay'
+import { RotateGate } from './ui/RotateGate'
 import { useGameSnapshot } from './hooks/useGameSnapshot'
 
 /** Kompozisyon kökü: bağımlılıklar burada kurulur ve enjekte edilir (DIP). */
@@ -72,6 +73,7 @@ export default function App() {
         <SpawnPlane onSpawn={controller.spawnAt} />
       </Canvas>
       <Overlay controller={controller} game={game} />
+      <RotateGate />
     </>
   )
 }
