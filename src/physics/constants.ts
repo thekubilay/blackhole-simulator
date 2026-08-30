@@ -11,3 +11,18 @@ export const ISCO = 3
  * tempo artık kare hızından bağımsızdır (yavaş makinede de aynı akış).
  */
 export const SIM_SPEED = 16.5
+
+/**
+ * Laboratuvarın varsayılan zaman hızı. Mutlak oynatma hızının fiziksel bir
+ * hükmü yoktur: gerçek iç disk saniyede 366 (A0620) / 653 (Cygnus X-1) tur
+ * atar — ekranda zaten ~3000 kat yavaşlatılmış haldeyiz ve disk dokusunun
+ * dönüşü Kepler Ω'sına değil shader'daki sabitlere bağlıdır. 0.3, akışı daha
+ * ihtişamlı gösterdiği için seçildi (kullanıcı kararı); hiçbir GR ilişkisini
+ * değiştirmez — timeScale hem fizik entegratörünü hem shader zamanını
+ * birlikte çarpar.
+ */
+export const LAB_TIME_SCALE = 0.3
+
+/** Kenetlenme oyunu kendi temposunu sabitler: akort sabitleri (sürüklenme,
+ * yakıt, ISCO'ya kalan süre) bu hızda ölçüldü, lab ayarına bağlanmaz. */
+export const GAME_TIME_SCALE = 1

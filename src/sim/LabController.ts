@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { SIM_SPEED } from '../physics/constants'
+import { LAB_TIME_SCALE, SIM_SPEED } from '../physics/constants'
 import type { BlackHolePreset } from '../physics/presets'
 import type {
   BodyRegistry,
@@ -41,7 +41,7 @@ export class LabController implements LabCommands, SnapshotSource {
   private armed: string | null = ASTRONAUT_ENABLED ? 'astro' : null
   private mode: SpawnMode = 'orbit'
   private paused = false
-  private timeScale = 1
+  private timeScale = LAB_TIME_SCALE
   private focus: SimObject | null = null
   private realistic = false
   private resetSeq = 0
@@ -94,6 +94,14 @@ export class LabController implements LabCommands, SnapshotSource {
     this.simTime += dtSim
     // uzun oturumda float32 shader zamanı hassas kalsın
     if (this.simTime > 7200) this.simTime -= 7200
+    if (import.meta.env.DEV) {
+      // ölçüm kancası (GameCamera'daki __gameCam ile aynı desen): zaman hızı
+      // oyuna girince 1'e sabitlenmeli, çıkınca oyuncunun lab ayarına dönmeli
+      ;(window as unknown as Record<string, unknown>).__lab = {
+        timeScale: this.timeScale,
+        simTime: this.simTime,
+      }
+    }
     if (dtSim > 0) this.sim.step(dtSim)
     this.governor.tick(delta)
     this.emitAcc += dt
@@ -190,7 +198,7 @@ export class LabController implements LabCommands, SnapshotSource {
     this.sim.clear()
     this.focus = null
     this.paused = false
-    this.timeScale = 1
+    this.timeScale = LAB_TIME_SCALE
     this.resetSeq++
     this.hint = 'Sahne başa sarıldı — kamera ve zaman sıfırlandı.'
     this.publish()

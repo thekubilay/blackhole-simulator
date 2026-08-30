@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { GAME_TIME_SCALE } from '../physics/constants'
 import { PRESETS } from '../physics/presets'
 import type { GeodesicEngine } from '../physics/geodesics'
 import type { LabController } from '../sim/LabController'
@@ -80,6 +81,8 @@ export class GameController {
   /** aktif ?oyun= test pini — kurulumda kullanılır, UI'de rozet olarak görünür */
   readonly pin: string | null = new URLSearchParams(window.location.search).get('oyun')
   private readonly lab: LabController
+  /** oyuna girerken saklanan lab zaman hızı — çıkışta geri verilir */
+  private labTimeScale = GAME_TIME_SCALE
   private engine: GeodesicEngine
   private pod: SimObject | null = null
   private endurance: SimObject | null = null
@@ -131,6 +134,11 @@ export class GameController {
     if (this.active) return
     this.active = true
     this.briefing = true
+    // oyun kendi temposunda koşar: lab'ın zaman hızı (varsayılan 0.3, sadece
+    // seyir zevki için) akort sabitlerini bozmasın. Oyuncunun lab ayarı
+    // saklanır ve çıkışta geri verilir.
+    this.labTimeScale = this.lab.getSnapshot().timeScale
+    this.lab.setTimeScale(GAME_TIME_SCALE)
     window.addEventListener('keydown', this.onKeyDown)
     window.addEventListener('keyup', this.onKeyUp)
     this.publish()
@@ -170,6 +178,7 @@ export class GameController {
     this.reason = null
     this.stats = null
     this.lab.rewind() // duraklatmayı da sıfırlar
+    this.lab.setTimeScale(this.labTimeScale) // oyuncunun lab temposu geri
     this.publish()
   }
 
