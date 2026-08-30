@@ -140,9 +140,9 @@ export class LabController implements LabCommands, SnapshotSource {
 
   setRealistic(on: boolean): void {
     this.realistic = on
-    this.hint = on
-      ? 'Gerçekçi mod: parlaklık ∝ g⁴ (toplam kayma) — yaklaşan taraf kat kat parlak ve mavi, iç kenar kütleçekimsel kaymayla sönük; disk kara cisim renginde, yıldızlar pozlama gereği söner.'
-      : 'Sanatsal mod: referans-görüntü paleti — Doppler asimetrisi yumuşatılmış, sıcak altın tonlar.'
+    // uzun anlatım GENEL AYARLAR'daki tanıtım kutusunda duruyor (ControlsPanel
+    // VIEW_ABOUT) — ipucu satırı yalnız değişimi bildirir, metni tekrarlamaz
+    this.hint = on ? 'Gerçekçi (g⁴) görünüme geçildi.' : 'Sanatsal görünüme geçildi.'
     this.publish()
   }
 

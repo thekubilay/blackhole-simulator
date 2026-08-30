@@ -8,6 +8,19 @@ const MODES: [SpawnMode, string][] = [
   ['fall', 'Serbest düşüş'],
 ]
 
+/** GÖRÜNÜM seçimi altındaki tanıtım: iki modun da ışın izleme fiziği aynıdır,
+ * değişen yalnız diskin renklendirilmesi ve pozlamasıdır (lensShader uRealism). */
+const VIEW_ABOUT: Record<'artistic' | 'realistic', { head: string; text: string }> = {
+  artistic: {
+    head: 'SANATSAL',
+    text: 'Filmlerden tanıdığın görüntü: sıcak altın paleti, yumuşatılmış Doppler asimetrisi. Fizik aynı kalır — ışınlar yine gerçek jeodezikleri izler, disk iç kenarı yine ISCO’dur; değişen sadece renklendirme ve pozlamadır. Yıldız alanı kısılmadığı için arka plan ve diskin her yeri okunaklı durur.',
+  },
+  realistic: {
+    head: 'GERÇEKÇİ (g⁴)',
+    text: 'Oraya gönderilen bir kameranın gerçekte kaydedeceği şey: parlaklık toplam kaymanın dördüncü kuvvetiyle ölçeklenir (I ∝ g⁴). Sana doğru dönen kenar kat kat parlar ve maviye kayar, uzaklaşan kenar söner; iç kenar kütleçekimsel kaymayla kararır ve disk kara cisim renginde görünür. Disk o kadar parlaktır ki ona pozlanmış kamerada arka plan yıldızları sönük kalır (Luminet 1979).',
+  },
+}
+
 /**
  * GENEL AYARLAR sekmesinin içeriği — dialog kabuğunu Overlay sahiplenir.
  * Delik seçimi buradan KARA DELİKLER sekmesine taşındı (HolesPanel).
@@ -29,6 +42,15 @@ export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) 
           Gerçekçi (g⁴)
         </button>
       </div>
+      {(() => {
+        const v = VIEW_ABOUT[s.realistic ? 'realistic' : 'artistic']
+        return (
+          <div className="about-box">
+            <div className="about-box-head">{v.head}</div>
+            <p>{v.text}</p>
+          </div>
+        )
+      })()}
       {/* NESNE seçimi şimdilik gizli — tek nesne türü (Astronot) var
       <div className="lbl">NESNE</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
@@ -60,14 +82,8 @@ export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) 
         value={s.timeScale}
         onChange={(e) => lab.setTimeScale(Number(e.target.value))}
       />
-      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-        <button style={{ flex: 1 }} onClick={() => lab.togglePause()}>
-          {s.paused ? 'Devam' : 'Duraklat'}
-        </button>
-        <button style={{ flex: 1 }} onClick={() => lab.clear()}>
-          Temizle
-        </button>
-      </div>
+      {/* Duraklat/Temizle satırı kaldırıldı (kullanıcı isteği) — Temizle
+          telemetri şeridinde duruyor, duraklatmayı oyun programlı kullanır */}
       <div style={{ marginTop: 10, color: '#ffb877', fontSize: 10, minHeight: 26, lineHeight: 1.4 }}>
         {s.hint}
       </div>

@@ -21,8 +21,8 @@ export function HolesPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
         ))}
       </div>
       {sel && (
-        <div className="hole-about">
-          <div className="hole-about-head">{sel.name}</div>
+        <div className="about-box">
+          <div className="about-box-head">{sel.name}</div>
           <p>{sel.about}</p>
           <div className="hole-facts">
             <div className="gstat">

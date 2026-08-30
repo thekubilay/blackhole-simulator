@@ -211,15 +211,15 @@ a:hover {
   box-shadow: none;
   border-right-color: transparent;
 }
-/* KARA DELİKLER sekmesi: seçili deliğin tanıtım kutusu */
-.ui .hole-about {
+/* seçili şeyin (kara delik, görünüm modu) tanıtım kutusu */
+.ui .about-box {
   margin-top: 14px;
   padding: 13px 14px 12px;
   border: 1px solid var(--amber-line);
   border-radius: var(--r-el);
   background: rgba(255, 154, 77, 0.045);
 }
-.ui .hole-about-head {
+.ui .about-box-head {
   font-family: var(--font-display);
   font-weight: 500;
   font-size: 12px;
@@ -227,7 +227,7 @@ a:hover {
   color: #ffb877;
   margin-bottom: 7px;
 }
-.ui .hole-about p {
+.ui .about-box p {
   margin: 0;
   font-size: 11px;
   line-height: 1.65;
