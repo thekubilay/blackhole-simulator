@@ -11,7 +11,7 @@ import { PhysicsPanel } from './PhysicsPanel'
 import { QuantumPanel } from './QuantumPanel'
 import { Dialog } from './Dialog'
 import { TouchThrust } from './TouchThrust'
-import { useTouchUi } from './touch'
+import { TOUCH_PIN, useTouchUi } from './touch'
 
 type Tab = 'delikler' | 'genel' | 'fizik' | 'kuantum'
 
@@ -61,15 +61,26 @@ export function Overlay({ controller, game }: { controller: LabController; game:
           <div className="brand-sub">
             KENETLENME · {s.hole.name}
             {game.pin ? ` · TEST PİNİ: ${game.pin}` : ''}
+            {/* mobil pini masaüstünde dokunmatik UI'yi açıyor: neden yarım
+                ekran kontrolleri var, rozetten anlaşılsın */}
+            {TOUCH_PIN ? ' · MOBİL PİN' : ''}
           </div>
         </div>
-        <button
-          className="icon-btn game-exit"
-          onClick={() => (!g.briefing && g.phase === 'flying' ? game.openBriefing() : game.exit())}
-          aria-label={!g.briefing && g.phase === 'flying' ? 'Brifingi aç (ESC)' : 'Oyundan çık'}
-        >
-          <i className="fa-regular fa-xmark" aria-hidden="true" />
-        </button>
+        {/* sağ üst satır: FPS + çıkış — oyunda lab HUD'u çekildiği için kare
+            hızı buradan okunur (masaüstü ve mobil, aynı yer) */}
+        <div className="game-topright">
+          <div className="gstat game-fps">
+            <span>FPS</span>
+            <b>{s.fps}</b>
+          </div>
+          <button
+            className="icon-btn game-exit"
+            onClick={() => (!g.briefing && g.phase === 'flying' ? game.openBriefing() : game.exit())}
+            aria-label={!g.briefing && g.phase === 'flying' ? 'Brifingi aç (ESC)' : 'Oyundan çık'}
+          >
+            <i className="fa-regular fa-xmark" aria-hidden="true" />
+          </button>
+        </div>
         {g.briefing && (
           <div className="game-brief card">
             <div className="panel-title" style={{ marginBottom: 10 }}>
@@ -119,6 +130,11 @@ export function Overlay({ controller, game }: { controller: LabController; game:
               <button className="on" onClick={() => game.begin()}>
                 DEVAM ET
               </button>
+              {/* yalnız duraklatılmış koşuda: mobilde R tuşu olmadığı için
+                  uçuş sırasında yeniden başlatmanın tek yolu bu */}
+              {g.phase === 'flying' && (
+                <button onClick={() => game.restartFromBriefing()}>YENİDEN BAŞLAT</button>
+              )}
               <button onClick={() => game.exit()}>ÇIKIŞ</button>
             </div>
           </div>

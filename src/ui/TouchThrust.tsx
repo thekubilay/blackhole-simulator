@@ -36,18 +36,14 @@ export function TouchThrust({ game }: { game: GameController }) {
         onPointerUp={hold(setDownS, false)}
         onPointerCancel={hold(setDownS, false)}
         aria-hidden="true"
-      >
-        S
-      </div>
+      />
       <div
         className={`touch-zone touch-zone-w${downW ? ' held' : ''}`}
         onPointerDown={hold(setDownW, true)}
         onPointerUp={hold(setDownW, false)}
         onPointerCancel={hold(setDownW, false)}
         aria-hidden="true"
-      >
-        W
-      </div>
+      />
     </div>
   )
 }

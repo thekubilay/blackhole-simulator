@@ -191,6 +191,17 @@ export class GameController {
     this.startRun()
   }
 
+  /**
+   * Duraklatılmış brifingden yeniden başlat. Ayrı yol: R tuşu brifing açıkken
+   * bilerek çalışmaz (yazı okunurken kazara sıfırlama olmasın), ama brifingdeki
+   * buton — mobilde R tuşu olmadığı için tek yeniden başlatma yolu — çalışmalı.
+   */
+  restartFromBriefing(): void {
+    if (!this.active || !this.briefing) return
+    this.briefing = false
+    this.startRun() // duraklatmayı kendisi kaldırır
+  }
+
   /** Her karede sim adımından ÖNCE çağrılır (öncelik −3): itki + kurallar. */
   tick(delta: number): void {
     if (!this.active || this.briefing) return
