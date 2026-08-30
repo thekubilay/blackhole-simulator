@@ -187,6 +187,7 @@ void main(){
     gl_FragColor = vec4(cf*vf, 1.); return;
   }
   bool captured = false;
+  bool escaped = false;
   float minR = 1e4;
   float stepScale = 150.0/float(uSteps);
   // geniş etki parametreli ışınlar az bükülür: adımı kademeli kabalaştır.
@@ -197,11 +198,11 @@ void main(){
     float r2 = dot(p,p); float r = sqrt(r2);
     minR = min(minR, r);
     if(r < 1.0){ captured=true; break; }
-    if(r > uEsc && dot(p,v) > 0.) break;
+    if(r > uEsc && dot(p,v) > 0.){ escaped=true; break; }
     // dış bölgede merkezden VE disk düzleminden uzaklaşan ışın bir daha
     // kesişemez (240 ≈ (R_OUT+2)²): kalan zayıf bükülme uEsc'e kadar süren
     // eski yürüyüşte de ihmal ediliyordu — erken çık, yıldıza git
-    if(r2 > 240.0 && p.y*v.y > 0. && dot(p,v) > 0.) break;
+    if(r2 > 240.0 && p.y*v.y > 0. && dot(p,v) > 0.){ escaped=true; break; }
     float dt = (0.045 + 0.065*max(r-1.6, 0.)) * stepScale * dtBoost;
     vec3 a = -1.5*h2*p/(r2*r2*r);
     vec3 pPrev = p;
@@ -229,7 +230,10 @@ void main(){
   }
   // disk pikseli neredeyse opaksa yıldız alanını hiç hesaplama:
   // katkısı (1−a)·yıldız < %1.5, gözle görülmez — fbm + yıldız ızgarası atlanır
-  vec3 bg = (captured || acc.a > 0.985) ? vec3(0.) : stars(normalize(v))*mix(1.0, 0.12, uRealism);
+  // !escaped: adım bütçesi foton halkası civarında dolanırken biten ışın —
+  // yönü yarı-yörüngede rastgeledir; yıldız örneklemek gölgenin üstüne
+  // sahte yıldız/çizgi serpiyordu. Bu bant ufka mahkûm bölgedir: siyah.
+  vec3 bg = (captured || !escaped || acc.a > 0.985) ? vec3(0.) : stars(normalize(v))*mix(1.0, 0.12, uRealism);
   vec3 col = acc.rgb + (1.-acc.a)*bg;
   if(!captured){
     // bu iki terim KOZMETİKTİR (sanatsal halo) — gerçekçi modda bastırılır:
