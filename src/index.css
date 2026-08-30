@@ -211,6 +211,51 @@ a:hover {
   box-shadow: none;
   border-right-color: transparent;
 }
+/* KARA DELİKLER sekmesi: seçili deliğin tanıtım kutusu */
+.ui .hole-about {
+  margin-top: 14px;
+  padding: 13px 14px 12px;
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-el);
+  background: rgba(255, 154, 77, 0.045);
+}
+.ui .hole-about-head {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: #ffb877;
+  margin-bottom: 7px;
+}
+.ui .hole-about p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--ink-body);
+}
+/* künye: dar dialogda satır atlar, HUD'daki gstat diliyle aynı */
+.ui .hole-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin: 12px 0 0;
+  padding-top: 11px;
+  border-top: 1px solid rgba(255, 154, 77, 0.12);
+}
+.ui .hole-facts .gstat {
+  align-items: flex-start;
+  min-width: 64px;
+}
+.ui .hole-facts .gstat b {
+  font-size: 12px;
+}
+.ui .hole-refs {
+  margin-top: 9px;
+  font-size: 9px;
+  line-height: 1.5;
+  letter-spacing: 0.03em;
+  color: #6b6055;
+}
 .ui input[type='range'] {
   -webkit-appearance: none;
   appearance: none;

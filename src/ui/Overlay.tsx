@@ -4,13 +4,14 @@ import type { GameController } from '../game/GameController'
 import { useLabSnapshot } from '../hooks/useLabSnapshot'
 import { useGameSnapshot } from '../hooks/useGameSnapshot'
 import { HudStrip } from './HudStrip'
+import { HolesPanel } from './HolesPanel'
 import { ControlsPanel } from './ControlsPanel'
 import { TelemetryPanel } from './TelemetryPanel'
 import { PhysicsPanel } from './PhysicsPanel'
 import { QuantumPanel } from './QuantumPanel'
 import { Dialog } from './Dialog'
 
-type Tab = 'genel' | 'fizik' | 'kuantum'
+type Tab = 'delikler' | 'genel' | 'fizik' | 'kuantum'
 
 /**
  * Duruma göre koçluk satırı — "W'ye basınca ne oluyor, şimdi ne yapmalıyım"
@@ -207,7 +208,7 @@ export function Overlay({ controller, game }: { controller: LabController; game:
       <div className="corner-tools">
         <button
           className="icon-btn"
-          onClick={() => setTab(tab ? null : 'genel')}
+          onClick={() => setTab(tab ? null : 'delikler')}
           aria-label={tab ? 'Ayarlar dialogunu kapat' : 'Ayarlar dialogunu aç'}
         >
           {/* FA kit <i>'yi SVG ile değiştirir; React'ın söküp yeniden kurabilmesi
@@ -225,6 +226,9 @@ export function Overlay({ controller, game }: { controller: LabController; game:
           <div className="card panel">
             <div className="panel-head-row">
               <div className="seg" style={{ flex: 1 }}>
+                <button className={tab === 'delikler' ? 'on' : ''} onClick={() => setTab('delikler')}>
+                  KARA DELİKLER
+                </button>
                 <button className={tab === 'genel' ? 'on' : ''} onClick={() => setTab('genel')}>
                   GENEL AYARLAR
                 </button>
@@ -240,6 +244,7 @@ export function Overlay({ controller, game }: { controller: LabController; game:
               </button>
             </div>
             <div className="panel-body">
+              {tab === 'delikler' && <HolesPanel s={s} lab={controller} />}
               {tab === 'genel' && <ControlsPanel s={s} lab={controller} />}
               {tab === 'fizik' && <PhysicsPanel />}
               {tab === 'kuantum' && <QuantumPanel />}

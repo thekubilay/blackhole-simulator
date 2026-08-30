@@ -1,5 +1,4 @@
 // import { BODY_REGISTRY } from '../sim/bodies/registry' // NESNE bölümü şimdilik gizli
-import { PRESETS } from '../physics/presets'
 import { ASTRONAUT_ENABLED } from '../sim/LabController'
 import type { LabCommands, LabSnapshot, SpawnMode } from '../sim/types'
 
@@ -9,22 +8,19 @@ const MODES: [SpawnMode, string][] = [
   ['fall', 'Serbest düşüş'],
 ]
 
-/** GENEL AYARLAR sekmesinin içeriği — dialog kabuğunu Overlay sahiplenir. */
+/**
+ * GENEL AYARLAR sekmesinin içeriği — dialog kabuğunu Overlay sahiplenir.
+ * Delik seçimi buradan KARA DELİKLER sekmesine taşındı (HolesPanel).
+ */
 export function ControlsPanel({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
   return (
     <>
       <div className="subtitle" style={{ margin: '0 0 4px' }}>
         {s.hole.name} · {s.hole.massLabel} · r₊ = 1 birim
       </div>
-      <div className="lbl">KARA DELİK</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
-        {Object.values(PRESETS).map((p) => (
-          <button key={p.id} className={s.hole.id === p.id ? 'on' : ''} onClick={() => lab.setHole(p.id)}>
-            {p.label}
-          </button>
-        ))}
+      <div className="lbl" style={{ marginTop: 8 }}>
+        GÖRÜNÜM
       </div>
-      <div className="lbl">GÖRÜNÜM</div>
       <div className="seg">
         <button className={s.realistic ? '' : 'on'} onClick={() => lab.setRealistic(false)}>
           Sanatsal

@@ -54,6 +54,13 @@ export interface BlackHolePreset {
   timeUnitMs: number
   profile: HoleProfile
   desc: string
+  /** KARA DELİKLER sekmesindeki tanıtım metni: keşif hikâyesi + spinin
+   * ekranda görünen sonucu (desc, delik değişince çıkan tek satırlık ipucudur) */
+  about: string
+  /** Dünya'dan uzaklık (ışıkyılı) — yayımlanmış paralaks/model ölçümleri */
+  distanceLy: number
+  /** tanıtımın altındaki kaynak satırı */
+  refs: string
   /** ışıma verimi η = 1 − E_ISCO — iç disk parlaklığını sürer (Novikov–Thorne) */
   efficiency: number
 }
@@ -67,6 +74,9 @@ function makePreset(opts: {
   engine: KerrEngine
   profile: Omit<HoleProfile, 'breakFactor' | 'diskIn' | 'diskOut'>
   desc: string
+  about: string
+  distanceLy: number
+  refs: string
 }): BlackHolePreset {
   const rgMeters = RG_SUN * opts.massSolar
   const rPlusMeters = opts.engine.rp * rgMeters
@@ -90,6 +100,9 @@ function makePreset(opts: {
     timeUnitMs: (rPlusMeters / C) * 1000,
     profile: { ...opts.profile, breakFactor, diskIn, diskOut: 13.5 },
     desc: opts.desc,
+    about: opts.about,
+    distanceLy: opts.distanceLy,
+    refs: opts.refs,
     efficiency,
   }
 }
@@ -105,6 +118,10 @@ function buildA0620(): BlackHolePreset {
     engine: new KerrEngine(a),
     profile: { minSpawnR: 1.3, fadeStart: 0.111, freezeFade: 0.047, killDist: 0.02 },
     desc: 'V616 Mon — bilinen en yakın kara deliklerden: M = 6.6 M☉ (Cantrell+ 2010), a* ≈ 0.12 (Gou+ 2010). Düşük spin: disk ufuktan uzakta (ISCO ≈ 2.8 r₊) biter.',
+    about:
+      '1975’te ani bir X-ışını parlamasıyla fark edildi: Tek Boynuzlu At takımyıldızında, turuncu bir yoldaş yıldızdan madde çeken sönük bir çift sistem. Bize en yakın kara deliklerden biri — ve dönüşü ölçülmüş en yavaşlardan. Neredeyse hiç dönmediği için son kararlı yörünge ufkun epeyce dışında kalır: ekranda diskin iç kenarıyla karanlığın arasındaki o geniş boşluk bundandır.',
+    distanceLy: 3460,
+    refs: 'M = 6.6 M☉ (Cantrell+ 2010) · a* ≈ 0.12 (Gou+ 2010) · d ≈ 1.06 kpc',
   })
 }
 
@@ -119,6 +136,10 @@ function buildCygX1(): BlackHolePreset {
     engine: new KerrEngine(a),
     profile: { minSpawnR: 1.05, fadeStart: 0.02, freezeFade: 0.008, killDist: 0.002 },
     desc: 'Keşfedilen ilk kara delik: M = 21.2 M☉ (Miller-Jones+ 2021), a* > 0.9985 (Zhao+ 2021). Uç spin: disk ufka yapışır (ISCO ≈ 1.15 r₊), iç disk daha parlak (η ≈ %30).',
+    about:
+      '1964’te bir roket uçuşunda bulundu ve kara delik olduğuna ikna olunan ilk gök cismi oldu; Kuğu takımyıldızında mavi bir dev yıldızın rüzgârını yutuyor. Hawking’in Thorne’a karşı girip 1990’da kaybettiği ünlü bahsin konusudur. İzin verilenin ucundaki bir hızla döner: dönme uzayı da beraberinde sürüklediğinden disk ufka kadar sokulur, iç bölge çok daha sıcak ve parlaktır.',
+    distanceLy: 7240,
+    refs: 'M = 21.2 M☉ (Miller-Jones+ 2021) · a* > 0.9985 (Zhao+ 2021) · d = 2.22 kpc',
   })
 }
 
