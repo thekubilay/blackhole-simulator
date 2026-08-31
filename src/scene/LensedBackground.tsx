@@ -44,8 +44,13 @@ export function LensedBackground({
     uniforms.uCamPos.value.copy(camera.position)
     uniforms.uCamMat.value.copy(camera.matrixWorld)
     uniforms.uProjInv.value.copy(camera.projectionMatrixInverse)
-    // kaçış yarıçapı jetin ucunu da kapsamalı: yoksa dikey huzme kesilir
-    const jetLen = controller.holeVisual.jetA[0] > 0 ? controller.holeVisual.jetB[1] + 4 : 0
+    // kaçış yarıçapı jetin ucunu da kapsamalı: yoksa dikey huzme kesilir.
+    // Jet yalnız gerçekçi modda çizilir; kapı SOLAN uniform değerine bakar ki
+    // moddan çıkarken jet ucu kırpılmadan sönsün, sanatsalda pay ödenmesin
+    const jetLen =
+      uniforms.uRealism.value > 0 && controller.holeVisual.jetA[0] > 0
+        ? controller.holeVisual.jetB[1] + 4
+        : 0
     uniforms.uEsc.value = Math.max(44, jetLen, camera.position.length() + 8)
     uniforms.uSteps.value = governor.current.steps
     // deliğe özgü GERÇEK türetimler: disk iç kenarı = ISCO, verim η = 1 − E_ISCO

@@ -8,16 +8,18 @@ const MODES: [SpawnMode, string][] = [
   ['fall', 'Serbest düşüş'],
 ]
 
-/** GÖRÜNÜM seçimi altındaki tanıtım: iki modun da ışın izleme fiziği aynıdır,
- * değişen yalnız diskin renklendirilmesi ve pozlamasıdır (lensShader uRealism). */
+/** GÖRÜNÜM seçimi altındaki tanıtım: ışın izleme (jeodezikler, gölge, ISCO) iki
+ * modda da aynıdır. SANATSAL, Interstellar'ın yolunu izler ve kaymaları, jeti,
+ * ışıma değişkenliğini görüntüden çıkarır; GERÇEKÇİ hepsini ölçülmüş
+ * parametrelerle çizer (lensShader uRealism). */
 const VIEW_ABOUT: Record<'artistic' | 'realistic', { head: string; text: string }> = {
   artistic: {
     head: 'SANATSAL',
-    text: 'Filmlerden tanıdığın görüntü: sıcak altın paleti, yumuşatılmış Doppler asimetrisi. Fizik aynı kalır — ışınlar yine gerçek jeodezikleri izler, disk iç kenarı yine ISCO’dur; değişen sadece renklendirme ve pozlamadır. Yıldız alanı kısılmadığı için arka plan ve diskin her yeri okunaklı durur.',
+    text: 'Interstellar’ın tercihi: Thorne ekibi Doppler ve kütleçekim kaymalarını hesapladı, Nolan seyirci şaşırmasın diye görüntüden çıkarttı — Gargantua’nın diski simetrik, durağan ve jetsizdir. Bu mod aynı sinematik sadeliği verir: altın palet, kaymasız simetrik disk, titremesiz ışıma, jet yok. Işınlar yine gerçek jeodezikleri izler, disk iç kenarı yine ISCO’dur ve yıldız alanı kısılmaz.',
   },
   realistic: {
     head: 'GERÇEKÇİ (g⁴)',
-    text: 'Oraya gönderilen bir kameranın gerçekte kaydedeceği şey: parlaklık toplam kaymanın dördüncü kuvvetiyle ölçeklenir (I ∝ g⁴). Sana doğru dönen kenar kat kat parlar ve maviye kayar, uzaklaşan kenar söner; iç kenar kütleçekimsel kaymayla kararır ve disk kara cisim renginde görünür. Disk o kadar parlaktır ki ona pozlanmış kamerada arka plan yıldızları sönük kalır (Luminet 1979).',
+    text: 'Oraya gönderilen bir kameranın gerçekte kaydedeceği şey: parlaklık toplam kaymanın dördüncü kuvvetiyle ölçeklenir (I ∝ g⁴). Sana doğru dönen kenar kat kat parlar ve maviye kayar, uzaklaşan kenar söner; iç kenar kütleçekimsel kaymayla kararır ve disk kara cisim renginde görünür. Jetler ve diskin gözlenmiş değişkenliği — GRS 1915’in dolup boşalması, Sgr A*’ın sıcak noktaları — yalnız bu modda, ölçülmüş parametrelerle çizilir. Disk o kadar parlaktır ki ona pozlanmış kamerada arka plan yıldızları sönük kalır (Luminet 1979).',
   },
 }
 

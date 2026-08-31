@@ -447,7 +447,9 @@ export const PRESETS: Readonly<Record<string, BlackHolePreset>> = {
   cygx1: buildCygX1(),
 }
 
-export const DEFAULT_PRESET_ID = 'm87'
+// Sgr A*: varsayılan mod SANATSAL (jetsiz) olduğundan jet vaat eden bir kartla
+// açılmamak için jeti zaten gözlenmemiş olan kendi galaksimizin merkezi seçildi
+export const DEFAULT_PRESET_ID = 'sgra'
 
 /** Saf Schwarzschild referans motoru testler ve çapraz doğrulama için kalır. */
 export const SCHWARZSCHILD_REFERENCE = Schwarzschild

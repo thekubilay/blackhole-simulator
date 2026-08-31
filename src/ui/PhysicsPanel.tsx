@@ -84,13 +84,15 @@ export function PhysicsPanel() {
         Shakura–Sunyaev) kara cisim rampasıyla mavi-beyaza kayar — gerçek bir yıldız kütleli deliğin diski o
         kadar parlaktır ki ona pozlanmış kamerada yıldızlar görünmez; bu modda yıldızların sönmesi bundandır.{' '}
         <b>Sanatsal mod</b> Interstellar'ın tercihidir: Thorne ekibi kaymaları hesapladı, Nolan seyirci için
-        simetrik altın paleti seçti — burada da asimetri yumuşatılır. Her iki modda da diske bırakılan cisim{' '}
+        görüntüden tümüyle çıkarttı — bu mod da aynısını yapar: simetrik altın disk; jetler ve ışıma
+        değişkenliği de yalnız gerçekçi modda çizilir (Gargantua'nın diski jetsiz ve durağandı). Her iki modda
+        da diske bırakılan cisim{' '}
         <b>plazma sürtünmesiyle</b> gerçekten enerji kaybeder (E ve L azalır) ve ISCO'ya, oradan ufka
         sarmallanır. (Sürtünme katsayısı fenomenolojiktir; gerçek disklerde bu işi MHD türbülansı yapar.)
       </div>
       <div className="fx">
         δ = 1 / [γ(1 − β·cosθ)] &nbsp;(θ: hız–gözlemci açısı) &nbsp;|&nbsp; g = δ·√(1−r<sub>s</sub>/r)
-        &nbsp;|&nbsp; I ∝ g⁴ (gerçekçi) · δ<sup>3.6</sup> (sanatsal)
+        &nbsp;|&nbsp; I ∝ g⁴ (gerçekçi) · kaymasız (sanatsal, Interstellar gibi)
       </div>
       <div className="sect">● MİMARİ &amp; PERFORMANS</div>
       <div className="body">

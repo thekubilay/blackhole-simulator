@@ -13,7 +13,10 @@ uniform int uSteps;
 uniform vec3 uCamPos;
 uniform mat4 uCamMat, uProjInv;
 // disk iç kenarı = aktif deliğin ISCO'su; uEff = ışıma verimi η = 1 − E_ISCO
-// uRealism: 0 = sanatsal palet, 1 = fiziksel (g⁴ hüzmeleme + kara cisim rengi)
+// uRealism 0 = SANATSAL: Interstellar'ın tercihi (James+ 2015, Fig 15a+flare) —
+// kaymasız simetrik altın disk, jet ve ışıma değişkenliği YOK (Gargantua jetsiz
+// ve durağandı). 1 = GERÇEKÇİ: g⁴ hüzmeleme, kara cisim rengi, jet + gözlenmiş
+// değişkenlik. Lensleme (jeodezikler, ISCO, gölge) iki modda da aynıdır.
 uniform float uDiskIn, uEff, uRealism;
 // ---- deliğe özgü GÖZLENMİŞ karakter (bkz. presets.ts / HoleVisual) --------
 // uDiskThick: yarı kalınlık çarpanı (1 = ince Shakura–Sunyaev, >2 = şişkin RIAF)
@@ -93,22 +96,26 @@ float diskH(float rr){ return (0.05 + 0.052*rr) * uDiskThick; }
 // Parlaklık değişkenliği. GRS 1915'in limit-cycle'ı: iç diskte madde yavaşça
 // birikir, ışıma basıncı eşiği aşınca iç bölge ani boşalır (dar patlama), sonra
 // yeniden dolar. Faz yarıçapla gecikir ⇒ dalga içe doğru yürür.
+// Değişkenlik gözlenmiş fiziktir ⇒ yalnız gerçekçi modda: uRealism çarpanı
+// sanatsalda diski Interstellar gibi durağan bırakır, geçişte yumuşak soldurur.
 float diskFlicker(float rr){
-  if(uDiskVar.x <= 0.001) return 1.0;
+  float amp = uDiskVar.x * uRealism;
+  if(amp <= 0.001) return 1.0;
   float ph = fract(uTime*uDiskVar.y - rr*0.055);
   float burst = exp(-pow((ph-0.72)/0.075, 2.0));
-  return max(1.0 + uDiskVar.x*(1.55*burst + 0.35*ph - 0.42), 0.05);
+  return max(1.0 + amp*(1.55*burst + 0.35*ph - 0.42), 0.05);
 }
 // Azimut lekeliliği: dönen sıcak noktalar. Sgr A*'ın EHT görüntüsündeki
 // "düzensiz parlak lekeler" — gaz ufkun çevresini dakikalar içinde dolandığı
 // için görüntü çekim sürerken değişir; burada da leke deseni sürekli döner.
 float diskPatchF(vec2 xz, float rr, float n){
-  if(uDiskPatch.x <= 0.001) return 1.0;
+  float amp = uDiskPatch.x * uRealism;   // sıcak noktalar da yalnız gerçekçide
+  if(amp <= 0.001) return 1.0;
   float ang = atan(xz.y, xz.x);
   float w = uTime*uDiskPatch.y*TAU;
   float p = 0.5+0.5*sin(mod(2.0*ang - w + rr*1.15 + n*4.0, TAU));
   float q = 0.5+0.5*sin(mod(3.0*ang - w*1.7 - rr*0.8, TAU));
-  return max(1.0 + uDiskPatch.x*(1.35*p*q - 0.45), 0.05);
+  return max(1.0 + amp*(1.35*p*q - 0.45), 0.05);
 }
 // hp: örnek noktası (y ≠ 0 olabilir — hacim örneği), H: yerel yarı kalınlık,
 // dsl: bu örneğin temsil ettiği ışın yolu uzunluğu (hacim entegrasyon ağırlığı)
@@ -157,20 +164,20 @@ void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
   float dop = 1./(gamma*(1.+beta*dot(td,vn)));
   float gfac = sqrt(max(1.-1./rr, 0.03));   // kütleçekimsel kayma √(1−rs/r)
   float shift = dop * gfac;                 // toplam g = ν_gözlenen/ν_yayılan
-  // Sanatsal: δ^(3.6)·√f (mevcut görünüm). Gerçekçi: bolometrik I ∝ g⁴ —
-  // yaklaşan taraf kat kat parlak, iç kenar kütleçekimsel kaymayla SÖNÜK
+  // Sanatsal = Interstellar'ın gerçek tercihi (filmdeki disk = Fig 15a: renk
+  // VE parlaklık kayması yok; Nolan asimetriyi seyirci için tamamen çıkarttı):
+  // boost 1, disk simetrik altın halka kalır. Gerçekçi: bolometrik I ∝ g⁴ —
+  // yaklaşan taraf kat kat parlak, iç kenar kütleçekimsel kaymayla SÖNÜK;
   // gerçekçi pozlama düşük tutulur: yoksa her iki yan da ton eşlemede beyaza
   // kırpılır ve g⁴'ün ~20× asimetrisi görünmez olur (Luminet 1979 kontrastı)
-  float boostA = pow(dop, 3.6) * gfac;
   // 2.35/uDiskIn: pozlama deliğe normalize (uç spinde ISCO'ya bağlı emisyon
   // profili tüm kareyi karartmasın) — fizik değil, kamera pozlaması
   float boostR = 0.16 * (2.35/uDiskIn) * pow(shift, 4.0);
-  E *= mix(boostA, boostR, uRealism);
-  // Sanatsal renk: altın palet + belirgin Doppler mavi/kızıl ayrımı
+  E *= mix(1.0, boostR, uRealism);
+  // Sanatsal renk: altın palet, Doppler tonu YOK (kaymalar gerçekçiye taşındı);
+  // verim beyazlığı kalır — spin farkı sanatsalda da okunabilsin
   vec3 cA = diskRamp(rr);
   cA = mix(cA, vec3(1.08,1.02,.95), clamp(uEff*1.6*pow(uDiskIn/rr, 2.0), 0., .5));
-  cA = mix(cA, vec3(.98,1.0,1.08), clamp((dop-1.)*1.1,0.,.75));
-  cA = mix(cA, cA*vec3(1.,.40,.24), clamp((1.-dop)*1.5,0.,.9));
   // Gerçekçi renk: Shakura–Sunyaev T ∝ r^(−3/4), gözlenen sıcaklık g ile kayar —
   // disk mavi-beyaz, yaklaşan taraf maviye, uzaklaşan/iç bölge kızıla
   // Novikov–Thorne ince disk: T ∝ [r⁻³·(1−√(r_in/r))]^(1/4). İç kenarda tork
@@ -215,7 +222,8 @@ void sampleAtmo(vec3 hp, vec3 vn, float H, float ds, inout vec4 acc){
   float gamma = 1./sqrt(1.-beta*beta);
   float dop = 1./(gamma*(1.+beta*dot(td,vn)));
   float gfac = sqrt(max(1.-1./rr, 0.03));
-  float boost = mix(pow(dop,3.6)*gfac, 0.16*(2.35/uDiskIn)*pow(dop*gfac,4.0), uRealism);
+  // sanatsal kaymasız (bkz. sampleDisk), gerçekçi g⁴
+  float boost = mix(1.0, 0.16*(2.35/uDiskIn)*pow(dop*gfac,4.0), uRealism);
   // aynı Novikov–Thorne sıcaklık profili (bkz. sampleDisk)
   float xIn = uDiskIn/max(rr, uDiskIn);
   float tRel = 2.77 * pow(xIn, 0.75) * pow(max(1.-sqrt(xIn), 0.), 0.25) * dop * gfac;
@@ -269,7 +277,9 @@ void sampleJet(vec3 hp, vec3 vv, float dt, inout vec4 acc){
   // pozlaması kamera açısından bağımsızdır; yaklaşan/uzaklaşan kol arasındaki
   // δ^2.7 oranı olduğu gibi korunur. Fizik değil, kamera pozlamasıdır —
   // normalizasyonsuz jet ekvatordan bakıldığında 150 kat sönük, yani görünmez.
-  float E = uJetA.x * core * kn * turb * prof * pow(dop*g, 2.7) * (dt*sp) * 0.45;
+  // uRealism: jet YALNIZ gerçekçi modda (Gargantua jetsizdi — yığılmayan disk);
+  // çarpan mod geçişinde jeti yumuşakça soldurur/belirtir
+  float E = uJetA.x * uRealism * core * kn * turb * prof * pow(dop*g, 2.7) * (dt*sp) * 0.45;
   E = min(E, 4.0);
   acc.rgb += (1.-acc.a)*uJetColor*E;
   acc.a  += (1.-acc.a)*clamp(E*0.30, 0., 0.55);
@@ -302,7 +312,7 @@ void main(){
   if(h2 > 289.0){
     float td = (abs(v.y) > 1e-5) ? -p.y/v.y : -1.;   // disk düzlemi kesişimi
     bool diskDone = false;
-    if(uJetA.x > 0.0){
+    if(uJetA.x*uRealism > 0.0){
       // Bu dalda tek disk kesişimi jeti yakalayamaz (huzme dikeydir ve büyük
       // etki parametreli ışınların çoğu tam ondan geçer). Jeti kapsayan
       // silindirle kesiştirip yalnız o aralıkta düz bir marş yaparız.
@@ -382,7 +392,7 @@ void main(){
     // koni onu bir daha yakalayamaz. Kaba bir silindir testi SS 433'te 14
     // birim yarıçap verip her ışını 150 adım boyunca yürütüyordu (46 → 30 fps).
     bool jetAhead = false;
-    if(uJetA.x > 0.0){
+    if(uJetA.x*uRealism > 0.0){
       float hh = abs(p.y);
       float rjH = (uJetB.z + uJetA.w)*hh + uJetA.z + 1.0;
       float lxz = max(length(p.xz), 1e-4);
@@ -419,7 +429,7 @@ void main(){
     // Dış bölgede dt ≈ 0.8–1.9 birim, huzme çapı ise ~1–2: tek örnek benekli
     // çıkardı. Adımı BÖLMEK yerine adım İÇİNDE 3 alt örnek alınır — adım
     // bütçesi (uSteps) hiç tüketilmez, koni dışında üç ucuz erken dönüş olur.
-    if(uJetA.x > 0.0 && acc.a < 0.985){
+    if(uJetA.x*uRealism > 0.0 && acc.a < 0.985){
       // Önce TEK kaba test: adımın süpürdüğü aralık huzmeye değmiyorsa üç
       // çağrının kurulum maliyeti ödenmez. Test huzme EKSENİNE (helix üstünde
       // bir nokta) göre yapılır — precession konisini kapsayan silindire göre
