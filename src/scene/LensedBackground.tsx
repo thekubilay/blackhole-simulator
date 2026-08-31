@@ -1,10 +1,11 @@
 import { useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import type * as THREE from 'three'
 import type { HoleVisual } from '../physics/presets'
 import type { LabController } from '../sim/LabController'
 import type { QualityGovernor } from '../sim/QualityGovernor'
 import { LENS_FRAGMENT, LENS_VERTEX, createLensUniforms, type LensUniforms } from './lensShader'
+import { getNebulaCube } from './nebulaBake'
 
 /** Deliğin gözlenmiş imzasını uniform'lara aktarır — yalnız delik değişince. */
 function applyHoleVisual(u: LensUniforms, h: HoleVisual): void {
@@ -32,7 +33,15 @@ export function LensedBackground({
   governor: QualityGovernor
 }) {
   const material = useRef<THREE.ShaderMaterial>(null)
-  const initialUniforms = useMemo(() => createLensUniforms(), [])
+  const gl = useThree((s) => s.gl)
+  // Bulutsu alanı zamandan bağımsızdır: renderer başına BİR KEZ küp haritasına
+  // pişirilir (getNebulaCube önbelleklidir), sonra her karede tek doku
+  // okumasıyla gelir — eskiden piksel başına 7 oktav 3B gürültüydü.
+  const initialUniforms = useMemo(() => {
+    const uniforms = createLensUniforms()
+    uniforms.uNebTex.value = getNebulaCube(gl)
+    return uniforms
+  }, [gl])
   // son uygulanan görsel imza: preset.visual sabit nesnedir, referans
   // karşılaştırması delik değişimini bedelsiz yakalar
   const appliedVisual = useRef<HoleVisual | null>(null)

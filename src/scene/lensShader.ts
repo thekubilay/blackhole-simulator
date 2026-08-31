@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { NEBULA_SAMPLE_GLSL } from './nebulaBake'
 
 export const LENS_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -28,6 +29,7 @@ uniform vec2 uDiskVar, uDiskPatch;
 // uNebColor/uNebPar: arka plan bulutsusunun rengi ve (yoğunluk, yıldız çarpanı)
 uniform vec3 uNebColor;
 uniform vec2 uNebPar;
+${NEBULA_SAMPLE_GLSL}
 // uJetA = (güç, β, taban yarıçapı, alevlenme)
 // uJetB = (taban yüksekliği, uzunluk, precession tanα, precession rad/sn)
 // uJetC = (sarmal dalga sayısı, düğüm dalga sayısı, düğüm hızı, kenar keskinliği)
@@ -43,7 +45,6 @@ mat2 rot(float a){
   float c=cos(a),s=sin(a);return mat2(c,-s,s,c);
 }
 float hash12(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
-float hash13(vec3 p){ p=fract(p*0.1031); p+=dot(p,p.zyx+31.32); return fract((p.x+p.y)*p.z); }
 /**
  * (p, v) durumundan SONSUZA kalan ışın bükülmesinin kapalı formu.
  *
@@ -81,21 +82,6 @@ float fbm(vec2 p){ float v=0.,a=.5; for(int i=0;i<5;i++){ v+=a*vnoise(p); p=p*2.
 // sınırının (Nyquist) altında kalır, yalnız parıldama üretir. 1.107 = amplitüd
 // normalizasyonu (5 oktavlık toplam genlikle eşleşir, doku kontrastı korunur)
 float fbm3(vec2 p){ float v=0.,a=.5; for(int i=0;i<3;i++){ v+=a*vnoise(p); p=p*2.03+vec2(17.3,9.1); a*=.5; } return v*1.107; }
-// 3B değer gürültüsü — gökküre için: (azimut, yükseklik) düzlemi yerine YÖN
-// uzayında tanımlıdır, dolayısıyla kutupta tekilliği yoktur.
-float vnoise3(vec3 p){
-  vec3 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
-  float a=hash13(i),             b=hash13(i+vec3(1,0,0));
-  float c=hash13(i+vec3(0,1,0)), d=hash13(i+vec3(1,1,0));
-  float e=hash13(i+vec3(0,0,1)), g=hash13(i+vec3(1,0,1));
-  float h=hash13(i+vec3(0,1,1)), k=hash13(i+vec3(1,1,1));
-  return mix(mix(mix(a,b,f.x),mix(c,d,f.x),f.y), mix(mix(e,g,f.x),mix(h,k,f.x),f.y), f.z);
-}
-// 4 ve 3 oktav yeter (bulutsu düşük frekanslı bir pustur; üst oktavlar zaten
-// Nyquist altında kalıp yalnız parıldama üretiyordu). Çarpanlar genliği eski
-// 5 oktavlık toplama eşitler: 0.96875/0.9375 ve 0.96875/0.875
-float fbm3d(vec3 p){ float v=0.,a=.5; for(int i=0;i<4;i++){ v+=a*vnoise3(p); p=p*2.03+vec3(17.3,9.1,4.7); a*=.5; } return v*1.0333; }
-float fbm3dLo(vec3 p){ float v=0.,a=.5; for(int i=0;i<3;i++){ v+=a*vnoise3(p); p=p*2.03+vec3(17.3,9.1,4.7); a*=.5; } return v*1.107; }
 /**
  * Yön → küp yüzü koordinatı. xy = yüz üstü konum (−1..1), z = yüz kimliği;
  * aMax = |en büyük bileşen| (hücre katı açısı ∝ aMax³).
@@ -114,13 +100,13 @@ vec3 cubeUV(vec3 d, out float aMax){
 }
 vec3 stars(vec3 rd){
   vec3 col=vec3(0.);
-  // iki ölçekli bulutsu: ince pus (neb) + büyük kabuk/filaman yapısı (neb2).
-  // Renk ve yoğunluk deliğin gerçek çevresinden gelir — M87'nin sarımsı
-  // eliptik hâlesi, Sgr A*'ın kızıl galaktik-merkez tozu, SS 433'ün W50 kabuğu.
-  // Ölçekler eski (azimut×2.2 / ×1.1) desenle aynı boyutta yapı verir.
-  float neb=fbm3d(rd*2.2+7.0);
-  float neb2=fbm3dLo(rd*1.1+19.0);
-  col += uNebColor*uNebPar.x*(neb*neb*0.65 + pow(neb2,3.0)*0.85);
+  // iki ölçekli bulutsu: ince pus + büyük kabuk/filaman yapısı. Alan yalnız
+  // YÖNÜN fonksiyonu ve zamandan bağımsızdır ⇒ açılışta bir kez küp haritasına
+  // pişirilir (nebulaBake.ts); burada tek doku okuması kalır. Renk ve yoğunluk
+  // deliğin gerçek çevresinden gelir — M87'nin sarımsı eliptik hâlesi,
+  // Sgr A*'ın kızıl galaktik-merkez tozu, SS 433'ün W50 kabuğu — ve çalışma
+  // zamanında çarpılır, dolayısıyla delik değişince yeniden pişirme gerekmez.
+  col += uNebColor*uNebPar.x*nebulaAt(rd);
   float aMax;
   vec3 fc = cubeUV(rd, aMax);
   // yıldız yoğunluğu alana göre: galaktik merkez tıka basa, kuasar önalanı seyrek.
@@ -564,6 +550,8 @@ export type LensUniforms = {
   uDiskPatch: THREE.IUniform<THREE.Vector2>
   uNebColor: THREE.IUniform<THREE.Vector3>
   uNebPar: THREE.IUniform<THREE.Vector2>
+  /** açılışta pişirilen bulutsu alanı (bkz. nebulaBake.ts) */
+  uNebTex: THREE.IUniform<THREE.CubeTexture | null>
   uJetA: THREE.IUniform<THREE.Vector4>
   uJetB: THREE.IUniform<THREE.Vector4>
   uJetC: THREE.IUniform<THREE.Vector4>
@@ -587,6 +575,7 @@ export function createLensUniforms(): LensUniforms {
     uDiskPatch: { value: new THREE.Vector2(0, 0) },
     uNebColor: { value: new THREE.Vector3(0.028, 0.01, 0.006) },
     uNebPar: { value: new THREE.Vector2(1, 1) },
+    uNebTex: { value: null },
     uJetA: { value: new THREE.Vector4(0, 0, 0, 0) },
     uJetB: { value: new THREE.Vector4(0, 0, 0, 0) },
     uJetC: { value: new THREE.Vector4(0, 0, 0, 0) },
