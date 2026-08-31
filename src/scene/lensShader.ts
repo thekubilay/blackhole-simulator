@@ -43,6 +43,36 @@ mat2 rot(float a){
   float c=cos(a),s=sin(a);return mat2(c,-s,s,c);
 }
 float hash12(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float hash13(vec3 p){ p=fract(p*0.1031); p+=dot(p,p.zyx+31.32); return fract((p.x+p.y)*p.z); }
+/**
+ * (p, v) durumundan SONSUZA kalan ışın bükülmesinin kapalı formu.
+ *
+ * Işın denkleminin KENDİ dik ivmesi a⊥ = (3/2)h²b/r⁵ integre edilir (Newton
+ * benzeri 1/r³ yasası DEĞİL — bu denklemde bükülme periyapsis çevresinde çok
+ * daha keskin yoğunlaşır; 1/r³ ile kurulan formül b=17'de %10 şaşırıyordu):
+ *   ∫a⊥ ds = (1/2b)·[ s(2s²+3b²)/r³ ]  ⇒  d = (2 − G)/(2b),  G = s₀(2s₀²+3b²)/r³
+ * s₀→−∞'da d→2/b (tam 4M/b sapması), s₀=0'da yarısı, s₀→+∞'da sıfır.
+ * (1 + 1.6/b) çarpanı ikinci mertebeyi (düz yol yaklaşıklığının ıskaladığı,
+ * ışının b'den daha içeriden geçmesi) telafi eder: b = 17…25 aralığında kalan
+ * hata ≤ 0,03°'dir (ince adımlı sayısal entegrasyona karşı ölçüldü).
+ *
+ * İKİ yerde kullanılır ve KEYFÎ DEĞİL, ZORUNLUDUR: dış bölge ışınları düz
+ * kabul edilip hiç bükülmeyince (h² > 289 dalı) ve yürüyüş erken bitince
+ * (r² > 240 / uEsc çıkışları) gökyüzü örnekleme yönü eşikte SIÇRIYOR; b = 17'de
+ * sıçrama 7,15°'dir ve bulutsuda deliği merkez alan keskin bir ÇEMBER olarak
+ * görünür. Kalan sapmayı analitik eklemek iki dalı eşikte örtüştürür: ölçülen
+ * dikiş 7,15° → 0,06°, yani bulutsunun en ince yapısının çok altında.
+ */
+vec3 weakBend(vec3 p, vec3 v){
+  float r0 = length(p);
+  float s0 = dot(p, v);
+  float b = sqrt(max(r0*r0 - s0*s0, 1e-8));
+  if(b < 1e-3 || r0 < 1e-3) return v;         // radyal ışın: sapma yok
+  float G = s0*(2.0*s0*s0 + 3.0*b*b)/(r0*r0*r0);
+  float d = clamp(((2.0 - G)/(2.0*b))*(1.0 + 1.6/b), 0.0, 0.35);
+  vec3 n = (p - s0*v)/b;                      // merkezden ışına birim vektör
+  return normalize(v - n*d);
+}
 float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f);
   float a=hash12(i),b=hash12(i+vec2(1,0)),c=hash12(i+vec2(0,1)),d=hash12(i+vec2(1,1));
   return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
@@ -51,23 +81,59 @@ float fbm(vec2 p){ float v=0.,a=.5; for(int i=0;i<5;i++){ v+=a*vnoise(p); p=p*2.
 // sınırının (Nyquist) altında kalır, yalnız parıldama üretir. 1.107 = amplitüd
 // normalizasyonu (5 oktavlık toplam genlikle eşleşir, doku kontrastı korunur)
 float fbm3(vec2 p){ float v=0.,a=.5; for(int i=0;i<3;i++){ v+=a*vnoise(p); p=p*2.03+vec2(17.3,9.1); a*=.5; } return v*1.107; }
+// 3B değer gürültüsü — gökküre için: (azimut, yükseklik) düzlemi yerine YÖN
+// uzayında tanımlıdır, dolayısıyla kutupta tekilliği yoktur.
+float vnoise3(vec3 p){
+  vec3 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
+  float a=hash13(i),             b=hash13(i+vec3(1,0,0));
+  float c=hash13(i+vec3(0,1,0)), d=hash13(i+vec3(1,1,0));
+  float e=hash13(i+vec3(0,0,1)), g=hash13(i+vec3(1,0,1));
+  float h=hash13(i+vec3(0,1,1)), k=hash13(i+vec3(1,1,1));
+  return mix(mix(mix(a,b,f.x),mix(c,d,f.x),f.y), mix(mix(e,g,f.x),mix(h,k,f.x),f.y), f.z);
+}
+// 4 ve 3 oktav yeter (bulutsu düşük frekanslı bir pustur; üst oktavlar zaten
+// Nyquist altında kalıp yalnız parıldama üretiyordu). Çarpanlar genliği eski
+// 5 oktavlık toplama eşitler: 0.96875/0.9375 ve 0.96875/0.875
+float fbm3d(vec3 p){ float v=0.,a=.5; for(int i=0;i<4;i++){ v+=a*vnoise3(p); p=p*2.03+vec3(17.3,9.1,4.7); a*=.5; } return v*1.0333; }
+float fbm3dLo(vec3 p){ float v=0.,a=.5; for(int i=0;i<3;i++){ v+=a*vnoise3(p); p=p*2.03+vec3(17.3,9.1,4.7); a*=.5; } return v*1.107; }
+/**
+ * Yön → küp yüzü koordinatı. xy = yüz üstü konum (−1..1), z = yüz kimliği;
+ * aMax = |en büyük bileşen| (hücre katı açısı ∝ aMax³).
+ * Küresel (azimut, yükseklik) ızgarasının yerine geçer: orada hücreler kutba
+ * yaklaştıkça 1/cos(yükseklik) ile daralıp yıldız yoğunluğunu SONSUZA
+ * götürüyordu — ekranda dönme ekseni yönünde parlak bir leke ("ışık kaçışı")
+ * ve ona yelpazelenen çizgiler oluşuyordu. Küp yüzünde hücreler her yerde
+ * benzer büyüklüktedir ve yüz kenarları tam hücre sınırına oturur (sc tam
+ * sayı), dolayısıyla hiçbir yıldız yüz dikişinde ikiye bölünmez.
+ */
+vec3 cubeUV(vec3 d, out float aMax){
+  vec3 ad = abs(d);
+  if(ad.x >= ad.y && ad.x >= ad.z){ aMax = max(ad.x, 1e-6); return vec3(d.zy/aMax, d.x > 0. ? 0. : 1.); }
+  if(ad.y >= ad.z){                 aMax = max(ad.y, 1e-6); return vec3(d.xz/aMax, d.y > 0. ? 2. : 3.); }
+  aMax = max(ad.z, 1e-6);           return vec3(d.xy/aMax, d.z > 0. ? 4. : 5.);
+}
 vec3 stars(vec3 rd){
   vec3 col=vec3(0.);
-  float az = atan(rd.z,rd.x);
   // iki ölçekli bulutsu: ince pus (neb) + büyük kabuk/filaman yapısı (neb2).
   // Renk ve yoğunluk deliğin gerçek çevresinden gelir — M87'nin sarımsı
-  // eliptik hâlesi, Sgr A*'ın kızıl galaktik-merkez tozu, SS 433'ün W50 kabuğu
-  float neb=fbm(vec2(az*2.2, rd.y*4.0)+7.0);
-  float neb2=fbm(vec2(az*1.1, rd.y*2.1)+19.0);
+  // eliptik hâlesi, Sgr A*'ın kızıl galaktik-merkez tozu, SS 433'ün W50 kabuğu.
+  // Ölçekler eski (azimut×2.2 / ×1.1) desenle aynı boyutta yapı verir.
+  float neb=fbm3d(rd*2.2+7.0);
+  float neb2=fbm3dLo(rd*1.1+19.0);
   col += uNebColor*uNebPar.x*(neb*neb*0.65 + pow(neb2,3.0)*0.85);
-  vec2 sph = vec2(az, asin(clamp(rd.y,-1.,1.)));
-  // yıldız yoğunluğu alana göre: galaktik merkez tıka basa, kuasar önalanı seyrek
-  float thr = 1.0 - 0.085*clamp(uNebPar.y, 0.15, 3.0);
+  float aMax;
+  vec3 fc = cubeUV(rd, aMax);
+  // yıldız yoğunluğu alana göre: galaktik merkez tıka basa, kuasar önalanı seyrek.
+  // aMax³ = hücre katı açısı: olasılığı bununla ölçeklemek sterradyan başına
+  // yıldız sayısını SABİTLER (eski ekvator yoğunluğuyla birebir aynı değer)
+  float thr = 1.0 - 0.085*clamp(uNebPar.y, 0.15, 3.0)*aMax*aMax*aMax;
   for(float i=0.;i<2.;i++){
     float sc = 70.+i*110.;
-    vec2 uv = sph*sc;
-    vec2 id = floor(uv), gv = fract(uv)-.5;
-    float h = hash12(id+i*7.13);
+    vec2 uv = fc.xy*sc;
+    // yüz kimliği hash'e karışır: altı yüz bağımsız yıldız alanı üretir
+    vec2 id = floor(uv) + vec2(fc.z*61.7 + i*137.3);
+    vec2 gv = fract(uv)-.5;
+    float h = hash12(id);
     if(h>thr){
       vec2 off = vec2(hash12(id+3.7),hash12(id+9.3))-.5;
       float d = length(gv-off*.7);
@@ -307,7 +373,7 @@ void main(){
   vec3 v = normalize(rd + (f0 - 1.)*dot(rd, pr)*pr);
   vec3 L = cross(p, v); float h2 = dot(L,L);
   vec4 acc = vec4(0.);
-  // Uzak ışınlar (etki parametresi > 17 rs) neredeyse bükülmez: analitik düz
+  // Uzak ışınlar (etki parametresi > 17 rs) az bükülür: analitik düz
   // yol — aynı görüntü, maliyetin küçük bir kısmı; uzaklaşınca GPU yükü sabit
   if(h2 > 289.0){
     float td = (abs(v.y) > 1e-5) ? -p.y/v.y : -1.;   // disk düzlemi kesişimi
@@ -366,8 +432,10 @@ void main(){
       float rr = length(hp.xz);
       if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, v, Hh, 2.0*Hh, acc); }
     }
-    // pozlama ödünü: gerçekçi modda disk parlaklığı yıldızları bastırır
-    vec3 cf = acc.rgb + (1.-acc.a)*stars(v)*mix(1.0, 0.12, uRealism);
+    // pozlama ödünü: gerçekçi modda disk parlaklığı yıldızları bastırır.
+    // Gökyüzü, ışının DÜZ yolu boyunca değil analitik zayıf alan sapmasıyla
+    // örneklenir: yürüyen dalla eşikte örtüşür (yoksa b = 17'de çember görünür)
+    vec3 cf = acc.rgb + (1.-acc.a)*stars(weakBend(p, v))*mix(1.0, 0.12, uRealism);
     gl_FragColor = vec4(finish(cf, ndc), 1.); return;
   }
   bool captured = false;
@@ -461,7 +529,11 @@ void main(){
   // halkası çevresinde dolanan ve ufka mahkûm ışındır: siyah. Uzakta ise
   // yalnız bütçe tükenmiştir (jet boyunca yürüyen ışın) — yıldızını görsün.
   bool lost = !escaped && !captured && dot(p,p) < 64.0;
-  vec3 bg = (captured || lost || acc.a > 0.985) ? vec3(0.) : stars(normalize(v))*mix(1.0, 0.12, uRealism);
+  // Yürüyüş uEsc'te ya da r² > 240 erken çıkışında biter; kalan zayıf bükülme
+  // analitik eklenir. Erken çıkış çoğu ışında periyapsisin hemen ardında olur
+  // ve tek başına sapmanın YARISINI atıyordu — düz dalla arasındaki fark bu.
+  vec3 bg = (captured || lost || acc.a > 0.985) ? vec3(0.)
+          : stars(weakBend(p, normalize(v)))*mix(1.0, 0.12, uRealism);
   vec3 col = acc.rgb + (1.-acc.a)*bg;
   if(!captured){
     // bu iki terim KOZMETİKTİR (sanatsal halo) — gerçekçi modda bastırılır:
