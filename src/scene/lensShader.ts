@@ -525,8 +525,9 @@ void main(){
     // bu iki terim KOZMETİKTİR (sanatsal halo) — gerçekçi modda bastırılır:
     // gerçek foton halkası ışın izlemedeki disk örneklerinden kendiliğinden
     // oluşur; yapay geniş parlama "sahte blur" gibi durur
+    // GENİŞ halo 0.30 → 0.05: deliği çevreleyen sahte blur kısıldı.
     col += mix(vec3(1.,.5,.24), vec3(.75,.85,1.15), uRealism)
-         * mix(0.30, 0.03, uRealism) * exp(-pow((minR-2.75)*1.15,2.));
+         * mix(0.05, 0.03, uRealism) * exp(-pow((minR-2.75)*1.15,2.));
     col += mix(vec3(1.05,.92,.75), vec3(.9,.95,1.2), uRealism)
          * mix(0.5, 0.10, uRealism) * exp(-pow((minR-1.55)*mix(5.5, 9.0, uRealism),2.));
   }
