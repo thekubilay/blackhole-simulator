@@ -297,8 +297,6 @@ void main(){
   vec3 v = normalize(rd + (f0 - 1.)*dot(rd, pr)*pr);
   vec3 L = cross(p, v); float h2 = dot(L,L);
   vec4 acc = vec4(0.);
-  // uzak ışınlar (etki parametresi > 17 rs) neredeyse bükülmez: analitik düz
-  // yol — aynı görüntü, maliyetin küçük bir kısmı; uzaklaşınca GPU yükü sabit
   // Uzak ışınlar (etki parametresi > 17 rs) neredeyse bükülmez: analitik düz
   // yol — aynı görüntü, maliyetin küçük bir kısmı; uzaklaşınca GPU yükü sabit
   if(h2 > 289.0){

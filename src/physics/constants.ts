@@ -14,8 +14,9 @@ export const SIM_SPEED = 16.5
 
 /**
  * Laboratuvarın varsayılan zaman hızı. Mutlak oynatma hızının fiziksel bir
- * hükmü yoktur: gerçek iç disk saniyede 366 (A0620) / 653 (Cygnus X-1) tur
- * atar — ekranda zaten ~3000 kat yavaşlatılmış haldeyiz ve disk dokusunun
+ * hükmü yoktur: gerçek iç disk yıldız kütleli deliklerde saniyede yüzlerce tur
+ * atar (Cygnus X-1'de 653) — ekranda zaten ~3000 kat yavaşlatılmış haldeyiz ve
+ * disk dokusunun
  * dönüşü Kepler Ω'sına değil shader'daki sabitlere bağlıdır. 0.3, akışı daha
  * ihtişamlı gösterdiği için seçildi (kullanıcı kararı); hiçbir GR ilişkisini
  * değiştirmez — timeScale hem fizik entegratörünü hem shader zamanını

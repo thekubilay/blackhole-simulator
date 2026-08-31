@@ -43,14 +43,15 @@ export function PhysicsPanel() {
       <div className="fx">
         Δa = 2GM·ℓ / r³ &nbsp;(radyal, serbest düşen çerçevede GR ile birebir)
       </div>
-      <div className="sect">● İKİ GERÇEK KARA DELİK (KERR)</div>
+      <div className="sect">● ALTI GERÇEK KARA DELİK (KERR)</div>
       <div className="body">
-        Menüdeki iki delik hayal ürünü değil, teleskoplarla ölçülmüş gerçek nesnelerdir; dinamikleri dönen
-        karadeliğin (<b>Kerr</b>) ekvatoral jeodezikleriyle çözülür (Bardeen–Press–Teukolsky 1972).{' '}
-        <b>A0620-00</b>, bize en yakın bilinen karadeliklerden: 6.6 M☉ (Cantrell+ 2010) ve yavaş dönüyor (a* ≈
-        0.12, Gou+ 2010) — diski ufkun epey uzağında, 2.8 r₊'da biter ve geride geniş, karanlık bir boşluk
-        kalır; kararlı yörüngede zaman genişlemesi ×1.45'i geçmez. <b>Cygnus X-1</b> ise 21.2 M☉ (Miller-Jones+
-        2021) ve doğada ölçülmüş en uç spinlerden birine sahip (a* &gt; 0.9985, Zhao+ 2021): dönen delik
+        Menüdeki altı delik hayal ürünü değil, teleskoplarla ölçülmüş gerçek nesnelerdir; dinamikleri dönen
+        karadeliğin (<b>Kerr</b>) ekvatoral jeodezikleriyle çözülür (Bardeen–Press–Teukolsky 1972). Aradaki
+        görsel farkın tamamı iki sayıdan doğar — kütle ölçeği ve spin. <b>SS 433</b> yavaş dönen ucu temsil
+        eder (spini henüz ölçülmedi, 0.2 alındı): diski ufkun epey uzağında, 2.7 r₊'da biter ve geride geniş,
+        karanlık bir boşluk kalır; kararlı yörüngede zaman genişlemesi ×1.48'i geçmez. <b>Cygnus X-1</b> ise
+        21.2 M☉ (Miller-Jones+ 2021) ve doğada ölçülmüş en uç spinlerden birine sahip (a* &gt; 0.9985, Zhao+
+        2021): dönen delik
         uzay-zamanı da beraberinde sürükler, kararlı yörüngeler ufkun dibine kadar sokulabilir — disk ufka
         yapışır, ISCO'da zaman ~×12 genişler ve maddenin ışımaya dönüşüm verimi η = 1 − E<sub>ISCO</sub> ile
         %6'dan %30'un üzerine çıkar: iç disk bu yüzden daha parlak ve beyazdır (Novikov–Thorne). Filmlerdeki
