@@ -14,6 +14,7 @@ import { GameLoop } from './scene/GameLoop'
 import { FrameLoopDriver } from './scene/FrameLoopDriver'
 import { QualityManager } from './scene/QualityManager'
 import { LensedBackground } from './scene/LensedBackground'
+import { PostFx } from './scene/PostFx'
 import { HorizonOccluders } from './scene/HorizonOccluders'
 import { Lights } from './scene/Lights'
 import { SimulationLayer } from './scene/SimulationLayer'
@@ -74,6 +75,8 @@ export default function App() {
         <Lights />
         <SimulationLayer controller={controller} />
         <SpawnPlane onSpawn={controller.spawnAt} />
+        {/* En sonda: öncelikli useFrame ile kareyi devralır (bkz. PostFx) */}
+        <PostFx />
       </Canvas>
       <Overlay controller={controller} game={game} />
       <RotateGate />
