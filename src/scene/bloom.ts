@@ -227,10 +227,13 @@ export class BloomPipeline {
   /** Ayarları canlı değiştirir (DEV'de `__bloom.set({...})` ile denemek için). */
   set(next: Partial<BloomParams>): BloomParams {
     Object.assign(this.params, next)
+    // en az bir kademe: 0 verilirse zincir hiç kurulmaz ve parlama sessizce
+    // kaybolurdu (DEV konsolundan `set({ levels: 0 })` ile kolayca yaşanır)
+    this.params.levels = Math.max(1, Math.floor(this.params.levels))
     this.prefilter.uniforms.uThreshold.value = this.params.threshold
     this.prefilter.uniforms.uKnee.value = Math.max(this.params.knee, 1e-3)
     this.up.uniforms.uRadius.value = this.params.radius
-    this.composite.uniforms.uStrength.value = this.params.strength
+    // uStrength'i render() her karede yazar (zincir boşsa 0'a düşürür)
     if (next.levels !== undefined) {
       this.width = 0 // hedefleri yeniden kurmaya zorla
     }
@@ -246,9 +249,12 @@ export class BloomPipeline {
     this.hdr.setSize(w, h)
     for (const m of this.mips) m.dispose()
     this.mips = []
+    // Tuval çok küçükse (yerleşim/yön geçişinde daralma, düşük dpr) zincir BOŞ
+    // kalabilir — render() bunu ayrıca ele alır, burada zorlama yapılmaz.
+    const levels = Math.max(1, Math.floor(this.params.levels))
     let mw = Math.max(Math.floor(w / 2), 1)
     let mh = Math.max(Math.floor(h / 2), 1)
-    for (let i = 0; i < this.params.levels && mw > 8 && mh > 8; i++) {
+    for (let i = 0; i < levels && mw > 8 && mh > 8; i++) {
       this.mips.push(makeTarget(mw, mh))
       mw = Math.max(Math.floor(mw / 2), 1)
       mh = Math.max(Math.floor(mh / 2), 1)
@@ -278,29 +284,41 @@ export class BloomPipeline {
     renderer.autoClear = true
     renderer.render(scene, camera)
 
-    // 2) Eşik → en büyük mip
-    this.prefilter.uniforms.tSrc.value = this.hdr.texture
-    this.draw(this.prefilter, this.mips[0], true)
+    // Mip zinciri BOŞ olabilir: tuvalin bir kenarı 17 pikselin altına inerse
+    // (yön/yerleşim geçişinde daralma, düşük dpr) hiç kademe kurulmaz. O durumda
+    // parlama üretilmez ama kare YİNE ÇİZİLİR — zincirsiz kalan bir karede
+    // this.mips[0] okumak useFrame içinde istisna atar ve R3F döngüsünü
+    // kalıcı olarak öldürürdü (tek karelik bozulma değil, siyah tuval).
+    const hasBloom = this.mips.length > 0
 
-    // 3) Aşağı: her kademe yayılımı ikiye katlar
-    for (let i = 1; i < this.mips.length; i++) {
-      const src = this.mips[i - 1]
-      this.down.uniforms.tSrc.value = src.texture
-      this.down.uniforms.uTexel.value.set(1 / src.width, 1 / src.height)
-      this.draw(this.down, this.mips[i], true)
-    }
+    if (hasBloom) {
+      // 2) Eşik → en büyük mip
+      this.prefilter.uniforms.tSrc.value = this.hdr.texture
+      this.draw(this.prefilter, this.mips[0], true)
 
-    // 4) Yukarı: toplamalı harman, temizleme YOK (üstüne eklenir)
-    for (let i = this.mips.length - 1; i > 0; i--) {
-      const src = this.mips[i]
-      this.up.uniforms.tSrc.value = src.texture
-      this.up.uniforms.uTexel.value.set(1 / src.width, 1 / src.height)
-      this.draw(this.up, this.mips[i - 1], false)
+      // 3) Aşağı: her kademe yayılımı ikiye katlar
+      for (let i = 1; i < this.mips.length; i++) {
+        const src = this.mips[i - 1]
+        this.down.uniforms.tSrc.value = src.texture
+        this.down.uniforms.uTexel.value.set(1 / src.width, 1 / src.height)
+        this.draw(this.down, this.mips[i], true)
+      }
+
+      // 4) Yukarı: toplamalı harman, temizleme YOK (üstüne eklenir)
+      for (let i = this.mips.length - 1; i > 0; i--) {
+        const src = this.mips[i]
+        this.up.uniforms.tSrc.value = src.texture
+        this.up.uniforms.uTexel.value.set(1 / src.width, 1 / src.height)
+        this.draw(this.up, this.mips[i - 1], false)
+      }
     }
 
     // 5) Birleştir → tuval. autoClear burada kareyi de temizler (renk+derinlik).
+    //    Zincir yoksa parlama sıfır ağırlıkla geçer: tBloom geçerli bir doku
+    //    olsun diye hdr bağlanır, katkısı uStrength = 0 ile silinir.
     this.composite.uniforms.tScene.value = this.hdr.texture
-    this.composite.uniforms.tBloom.value = this.mips[0].texture
+    this.composite.uniforms.tBloom.value = hasBloom ? this.mips[0].texture : this.hdr.texture
+    this.composite.uniforms.uStrength.value = hasBloom ? this.params.strength : 0
     this.draw(this.composite, null, true)
 
     // 6) Sahnenin geri kalanı (gemi, parçacıklar) birleştirmenin ÜSTÜNE.
