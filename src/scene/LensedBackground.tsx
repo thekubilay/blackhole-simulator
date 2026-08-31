@@ -5,6 +5,7 @@ import type { HoleVisual } from '../physics/presets'
 import type { LabController } from '../sim/LabController'
 import type { QualityGovernor } from '../sim/QualityGovernor'
 import { LENS_FRAGMENT, LENS_VERTEX, createLensUniforms, type LensUniforms } from './lensShader'
+import { LENS_LAYER, supportsHdrPost } from './bloom'
 import { getNebulaCube } from './nebulaBake'
 
 /** Deliğin gözlenmiş imzasını uniform'lara aktarır — yalnız delik değişince. */
@@ -37,9 +38,15 @@ export function LensedBackground({
   // Bulutsu alanı zamandan bağımsızdır: renderer başına BİR KEZ küp haritasına
   // pişirilir (getNebulaCube önbelleklidir), sonra her karede tek doku
   // okumasıyla gelir — eskiden piksel başına 7 oktav 3B gürültüydü.
+  //
+  // Bloom hattı varsa lens DOĞRUSAL HDR yazar (uToneMap 0) ve ayrı bir katmana
+  // çekilir: hat yalnız o katmanı HDR hedefe çizip parlamayı ondan üretir.
+  // Hat yoksa mesh normal katmanda kalır ve shader kendi ton eşlemesini yapar.
+  const postFx = useThree((s) => supportsHdrPost(s.gl))
   const initialUniforms = useMemo(() => {
     const uniforms = createLensUniforms()
     uniforms.uNebTex.value = getNebulaCube(gl)
+    uniforms.uToneMap.value = supportsHdrPost(gl) ? 0 : 1
     return uniforms
   }, [gl])
   // son uygulanan görsel imza: preset.visual sabit nesnedir, referans
@@ -76,7 +83,13 @@ export function LensedBackground({
     if (Math.abs(uniforms.uRealism.value - target) < 0.002) uniforms.uRealism.value = target
   })
   return (
-    <mesh renderOrder={-10} frustumCulled={false}>
+    <mesh
+      renderOrder={-10}
+      frustumCulled={false}
+      ref={(m) => {
+        m?.layers.set(postFx ? LENS_LAYER : 0)
+      }}
+    >
       <planeGeometry args={[2, 2]} />
       <shaderMaterial
         ref={material}

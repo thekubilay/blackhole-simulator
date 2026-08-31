@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { DISPLAY_TRANSFORM_GLSL } from './displayTransform'
 import { NEBULA_SAMPLE_GLSL } from './nebulaBake'
 
 export const LENS_VERTEX = /* glsl */ `
@@ -336,14 +337,13 @@ void sampleJet(vec3 hp, vec3 vv, float dt, inout vec4 acc){
   acc.rgb += (1.-acc.a)*uJetColor*E;
   acc.a  += (1.-acc.a)*clamp(E*0.30, 0., 0.55);
 }
-vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.); }
-vec3 finish(vec3 col, vec2 ndc){
-  col = aces(col);
-  col = pow(col, vec3(0.4545));
-  col += (hash12(gl_FragCoord.xy*.73)-.5)*0.012;   // dither: bantlaşmayı siler
-  float vig = 1.-0.32*pow(length(ndc*vec2(1.,.8)),2.6);
-  return col*vig;
-}
+${DISPLAY_TRANSFORM_GLSL}
+// Çıkış: uToneMap 0 = DOĞRUSAL HDR (bloom hattı devrede; ton eşleme birleştirme
+// geçişinde, bloom eklendikten SONRA yapılır — parlak disk çevresine ışık
+// taşıyabilsin diye >1 değerler burada kırpılmamalıdır). 1 = yedek yol:
+// HDR hedefi olmayan cihazda shader kendi ekran transformunu uygular.
+uniform float uToneMap;
+vec3 outColor(vec3 col, vec2 ndc){ return uToneMap > 0.5 ? finish(col, ndc) : col; }
 void main(){
   vec2 ndc = vUv*2.-1.;
   vec4 vp = uProjInv*vec4(ndc,-1.,1.); vp/=vp.w;
@@ -422,7 +422,7 @@ void main(){
     // Gökyüzü, ışının DÜZ yolu boyunca değil analitik zayıf alan sapmasıyla
     // örneklenir: yürüyen dalla eşikte örtüşür (yoksa b = 17'de çember görünür)
     vec3 cf = acc.rgb + (1.-acc.a)*stars(weakBend(p, v))*mix(1.0, 0.12, uRealism);
-    gl_FragColor = vec4(finish(cf, ndc), 1.); return;
+    gl_FragColor = vec4(outColor(cf, ndc), 1.); return;
   }
   bool captured = false;
   bool escaped = false;
@@ -525,12 +525,13 @@ void main(){
     // bu iki terim KOZMETİKTİR (sanatsal halo) — gerçekçi modda bastırılır:
     // gerçek foton halkası ışın izlemedeki disk örneklerinden kendiliğinden
     // oluşur; yapay geniş parlama "sahte blur" gibi durur
+    // GENİŞ halo 0.30 → 0.05: deliği çevreleyen sahte blur kısıldı.
     col += mix(vec3(1.,.5,.24), vec3(.75,.85,1.15), uRealism)
-         * mix(0.30, 0.03, uRealism) * exp(-pow((minR-2.75)*1.15,2.));
+         * mix(0.05, 0.03, uRealism) * exp(-pow((minR-2.75)*1.15,2.));
     col += mix(vec3(1.05,.92,.75), vec3(.9,.95,1.2), uRealism)
          * mix(0.5, 0.10, uRealism) * exp(-pow((minR-1.55)*mix(5.5, 9.0, uRealism),2.));
   }
-  gl_FragColor = vec4(finish(col, ndc), 1.);
+  gl_FragColor = vec4(outColor(col, ndc), 1.);
 }
 `
 
@@ -552,6 +553,8 @@ export type LensUniforms = {
   uNebPar: THREE.IUniform<THREE.Vector2>
   /** açılışta pişirilen bulutsu alanı (bkz. nebulaBake.ts) */
   uNebTex: THREE.IUniform<THREE.CubeTexture | null>
+  /** 0 = doğrusal HDR çıkış (bloom hattı devrede), 1 = shader kendi ton eşlemesini yapar */
+  uToneMap: THREE.IUniform<number>
   uJetA: THREE.IUniform<THREE.Vector4>
   uJetB: THREE.IUniform<THREE.Vector4>
   uJetC: THREE.IUniform<THREE.Vector4>
@@ -576,6 +579,7 @@ export function createLensUniforms(): LensUniforms {
     uNebColor: { value: new THREE.Vector3(0.028, 0.01, 0.006) },
     uNebPar: { value: new THREE.Vector2(1, 1) },
     uNebTex: { value: null },
+    uToneMap: { value: 1 },
     uJetA: { value: new THREE.Vector4(0, 0, 0, 0) },
     uJetB: { value: new THREE.Vector4(0, 0, 0, 0) },
     uJetC: { value: new THREE.Vector4(0, 0, 0, 0) },
