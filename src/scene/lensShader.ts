@@ -101,7 +101,12 @@ void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
   // Novikov–Thorne: yüksek spin → yüksek verim → daha parlak, daha beyaz iç disk
   E *= (0.85 + 2.2*uEff);
   vec3 td = normalize(vec3(-hp.z, 0., hp.x));
-  float beta = clamp(sqrt(0.5/max(rr,1.4)), 0., 0.62);
+  // yerel statik gözlemcinin ölçtüğü dairesel yörünge hızı — Newton'un
+  // √(M/r)'si DEĞİL: v = √(M/r)/√(1−rs/r); ISCO'da (3 rs) tam c/2.
+  // 0.62 tavanı ancak yüksek spinde ISCO 2.30 rs'in altına inince devreye
+  // girer (shader metriği Schwarzschild, uDiskIn ise Kerr ISCO'su).
+  float rb = max(rr, 1.4);
+  float beta = clamp(sqrt(0.5/rb)/sqrt(1.-1./rb), 0., 0.62);
   float gamma = 1./sqrt(1.-beta*beta);
   float dop = 1./(gamma*(1.+beta*dot(td,vn)));
   float gfac = sqrt(max(1.-1./rr, 0.03));   // kütleçekimsel kayma √(1−rs/r)
@@ -122,7 +127,12 @@ void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
   cA = mix(cA, cA*vec3(1.,.40,.24), clamp((1.-dop)*1.5,0.,.9));
   // Gerçekçi renk: Shakura–Sunyaev T ∝ r^(−3/4), gözlenen sıcaklık g ile kayar —
   // disk mavi-beyaz, yaklaşan taraf maviye, uzaklaşan/iç bölge kızıla
-  float tRel = 1.35 * pow(uDiskIn/max(rr,uDiskIn), 0.75) * shift;
+  // Novikov–Thorne ince disk: T ∝ [r⁻³·(1−√(r_in/r))]^(1/4). İç kenarda tork
+  // sıfırdır ⇒ T(r_in)=0; sıcaklık tepesi r=(49/36)·r_in ≈ 1.36·r_in'de.
+  // 2.77 çarpanı bu tepeyi eski saf r^(−3/4) profilinin tepesine oturtur:
+  // renk kalibrasyonu korunur, yalnız iç kenar sönükleşir.
+  float xIn = uDiskIn/max(rr, uDiskIn);
+  float tRel = 2.77 * pow(xIn, 0.75) * pow(max(1.-sqrt(xIn), 0.), 0.25) * shift;
   vec3 c = mix(cA, bbRamp(tRel), uRealism);
   // hacim ağırlığı: Gauss yoğunluk × (yol/kalınlık); 0.5 = dik geçişin
   // toplamı eski tek-örnek pozlamayla eşleşir (Σwv ≈ 1)
@@ -150,12 +160,20 @@ void sampleAtmo(vec3 hp, vec3 vn, float H, float ds, inout vec4 acc){
   float fade = smoothstep(uDiskIn, uDiskIn+0.5, rr) * pow(smoothstep(R_OUT, R_OUT-6.5, rr), 2.3);
   float D = fade * (0.25 + 0.75*lump*lump) * pow(uDiskIn/rr, 2.6);
   vec3 td = normalize(vec3(-hp.z, 0., hp.x));
-  float beta = clamp(sqrt(0.5/max(rr,1.4)), 0., 0.62);
+  // yerel statik gözlemcinin ölçtüğü dairesel yörünge hızı — Newton'un
+  // √(M/r)'si DEĞİL: v = √(M/r)/√(1−rs/r); ISCO'da (3 rs) tam c/2.
+  // 0.62 tavanı ancak yüksek spinde ISCO 2.30 rs'in altına inince devreye
+  // girer (shader metriği Schwarzschild, uDiskIn ise Kerr ISCO'su).
+  float rb = max(rr, 1.4);
+  float beta = clamp(sqrt(0.5/rb)/sqrt(1.-1./rb), 0., 0.62);
   float gamma = 1./sqrt(1.-beta*beta);
   float dop = 1./(gamma*(1.+beta*dot(td,vn)));
   float gfac = sqrt(max(1.-1./rr, 0.03));
   float boost = mix(pow(dop,3.6)*gfac, 0.16*(2.35/uDiskIn)*pow(dop*gfac,4.0), uRealism);
-  vec3 c = mix(diskRamp(rr), bbRamp(1.35*pow(uDiskIn/max(rr,uDiskIn),0.75)*dop*gfac), uRealism);
+  // aynı Novikov–Thorne sıcaklık profili (bkz. sampleDisk)
+  float xIn = uDiskIn/max(rr, uDiskIn);
+  float tRel = 2.77 * pow(xIn, 0.75) * pow(max(1.-sqrt(xIn), 0.), 0.25) * dop * gfac;
+  vec3 c = mix(diskRamp(rr), bbRamp(tRel), uRealism);
   float E = D * gz * (ds/H) * 0.5 * boost * (0.85 + 2.2*uEff);
   acc.rgb += (1.-acc.a)*c*E;
   acc.a  += (1.-acc.a)*clamp(E*.4,0.,.9)*.7;
@@ -165,8 +183,16 @@ void main(){
   vec2 ndc = vUv*2.-1.;
   vec4 vp = uProjInv*vec4(ndc,-1.,1.); vp/=vp.w;
   vec3 rd = normalize((uCamMat*vec4(vp.xyz,0.)).xyz);
-  vec3 p = uCamPos, v = rd;
-  vec3 L = cross(p, rd); float h2 = dot(L,L);
+  vec3 p = uCamPos;
+  // Statik gözlemci düzeltmesi: ekranda ÖLÇÜLEN yön koordinat yönü DEĞİLDİR.
+  // Tetrad ê_r = √(1−rs/r)·∂_r olduğundan tanψ_koord = tanψ_ölçülen/√(1−rs/r);
+  // radyal bileşeni √(1−rs/r) ile ölçekleyip yeniden normalize etmek buna denk.
+  // Düzeltmesiz gölge r₀=12 rs'te %4.3 büyük çıkıyordu; kamera yaklaştıkça artar.
+  float r0 = length(p);
+  float f0 = sqrt(max(1. - 1./r0, 1e-4));
+  vec3 pr = p/max(r0, 1e-4);
+  vec3 v = normalize(rd + (f0 - 1.)*dot(rd, pr)*pr);
+  vec3 L = cross(p, v); float h2 = dot(L,L);
   vec4 acc = vec4(0.);
   // uzak ışınlar (etki parametresi > 17 rs) neredeyse bükülmez: analitik düz
   // yol — aynı görüntü, maliyetin küçük bir kısmı; uzaklaşınca GPU yükü sabit
