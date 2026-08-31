@@ -38,6 +38,9 @@ export default function App() {
     // ?fps=120 → kare tavanı pinli başlar (test/ölçüm; HUD'dan da değişir)
     const fpsCap = params.get('fps') === '120' ? 120 : 60
     const controller = new LabController(sim, governor, BODY_REGISTRY, PRESETS, DEFAULT_PRESET_ID, fpsCap)
+    // ?delik=sgra|ss433|grs1915|3c273|cygx1 → o delikle açılır (ölçüm/paylaşım)
+    const hole = params.get('delik')
+    if (hole && PRESETS[hole]) controller.setHole(hole)
     const game = new GameController(controller)
     return { controller, governor, game }
   }, [])

@@ -15,12 +15,28 @@ uniform mat4 uCamMat, uProjInv;
 // disk iç kenarı = aktif deliğin ISCO'su; uEff = ışıma verimi η = 1 − E_ISCO
 // uRealism: 0 = sanatsal palet, 1 = fiziksel (g⁴ hüzmeleme + kara cisim rengi)
 uniform float uDiskIn, uEff, uRealism;
+// ---- deliğe özgü GÖZLENMİŞ karakter (bkz. presets.ts / HoleVisual) --------
+// uDiskThick: yarı kalınlık çarpanı (1 = ince Shakura–Sunyaev, >2 = şişkin RIAF)
+// uDiskGlow : Eddington oranıyla ölçekli genel parlaklık
+// uDiskVar  : (genlik, çevrim/sn) — limit-cycle / flare değişkenliği
+// uDiskPatch: (genlik, tur/sn) — dönen sıcak nokta lekeliliği
+uniform float uDiskThick, uDiskGlow;
+uniform vec2 uDiskVar, uDiskPatch;
+// uNebColor/uNebPar: arka plan bulutsusunun rengi ve (yoğunluk, yıldız çarpanı)
+uniform vec3 uNebColor;
+uniform vec2 uNebPar;
+// uJetA = (güç, β, taban yarıçapı, alevlenme)
+// uJetB = (taban yüksekliği, uzunluk, precession tanα, precession rad/sn)
+// uJetC = (sarmal dalga sayısı, düğüm dalga sayısı, düğüm hızı, kenar keskinliği)
+uniform vec4 uJetA, uJetB, uJetC;
+uniform vec3 uJetColor;
 #define R_OUT 13.5
+#define TAU 6.28318530718
 mat2 rot(float a){
   // KRİTİK: açıyı 2π'ye sar — float32 sin/cos büyük argümanda hassasiyet
   // kaybeder (özellikle Metal/ANGLE); sarılmazsa disk dokusu dakikalar
   // içinde piksel-tutarsızlığından "sahte blur"a çözülür
-  a = mod(a, 6.28318530718);
+  a = mod(a, TAU);
   float c=cos(a),s=sin(a);return mat2(c,-s,s,c);
 }
 float hash12(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
@@ -34,19 +50,26 @@ float fbm(vec2 p){ float v=0.,a=.5; for(int i=0;i<5;i++){ v+=a*vnoise(p); p=p*2.
 float fbm3(vec2 p){ float v=0.,a=.5; for(int i=0;i<3;i++){ v+=a*vnoise(p); p=p*2.03+vec2(17.3,9.1); a*=.5; } return v*1.107; }
 vec3 stars(vec3 rd){
   vec3 col=vec3(0.);
-  float neb=fbm(vec2(atan(rd.z,rd.x)*2.2, rd.y*4.0)+7.0);
-  col += vec3(.028,.010,.006)*neb*neb;
-  vec2 sph = vec2(atan(rd.z,rd.x), asin(clamp(rd.y,-1.,1.)));
+  float az = atan(rd.z,rd.x);
+  // iki ölçekli bulutsu: ince pus (neb) + büyük kabuk/filaman yapısı (neb2).
+  // Renk ve yoğunluk deliğin gerçek çevresinden gelir — M87'nin sarımsı
+  // eliptik hâlesi, Sgr A*'ın kızıl galaktik-merkez tozu, SS 433'ün W50 kabuğu
+  float neb=fbm(vec2(az*2.2, rd.y*4.0)+7.0);
+  float neb2=fbm(vec2(az*1.1, rd.y*2.1)+19.0);
+  col += uNebColor*uNebPar.x*(neb*neb*0.65 + pow(neb2,3.0)*0.85);
+  vec2 sph = vec2(az, asin(clamp(rd.y,-1.,1.)));
+  // yıldız yoğunluğu alana göre: galaktik merkez tıka basa, kuasar önalanı seyrek
+  float thr = 1.0 - 0.085*clamp(uNebPar.y, 0.15, 3.0);
   for(float i=0.;i<2.;i++){
     float sc = 70.+i*110.;
     vec2 uv = sph*sc;
     vec2 id = floor(uv), gv = fract(uv)-.5;
     float h = hash12(id+i*7.13);
-    if(h>0.915){
+    if(h>thr){
       vec2 off = vec2(hash12(id+3.7),hash12(id+9.3))-.5;
       float d = length(gv-off*.7);
-      float s = smoothstep(.14,.0,d)*(h-.915)/.085;
-      float tw = .75+.25*sin(mod(uTime*(1.+h*2.)+h*40., 6.28318530718));
+      float s = smoothstep(.14,.0,d)*(h-thr)/(1.0-thr);
+      float tw = .75+.25*sin(mod(uTime*(1.+h*2.)+h*40., TAU));
       col += vec3(1.,.96,.9)*s*s*1.4*tw;
     }
   }
@@ -64,8 +87,29 @@ vec3 bbRamp(float x){
   return x < 1.0 ? mix(cold, mid, smoothstep(.12,1.,x)) : mix(mid, hot, smoothstep(1.,1.9,x));
 }
 // ince disk kalınlık profili: dışa doğru alevlenir (Shakura–Sunyaev H ∝ r^(9/8)
-// biçimini izler); görsel okunabilirlik için fiziksel H/r (~0.02) abartılıdır
-float diskH(float rr){ return 0.05 + 0.052*rr; }
+// biçimini izler); uDiskThick gözlenmiş akış tipini taşır — ışıma yapamayan
+// kalın akış (M87*, Sgr A*) şişer, Eddington'a yakın beslenen disk (3C 273) incelir
+float diskH(float rr){ return (0.05 + 0.052*rr) * uDiskThick; }
+// Parlaklık değişkenliği. GRS 1915'in limit-cycle'ı: iç diskte madde yavaşça
+// birikir, ışıma basıncı eşiği aşınca iç bölge ani boşalır (dar patlama), sonra
+// yeniden dolar. Faz yarıçapla gecikir ⇒ dalga içe doğru yürür.
+float diskFlicker(float rr){
+  if(uDiskVar.x <= 0.001) return 1.0;
+  float ph = fract(uTime*uDiskVar.y - rr*0.055);
+  float burst = exp(-pow((ph-0.72)/0.075, 2.0));
+  return max(1.0 + uDiskVar.x*(1.55*burst + 0.35*ph - 0.42), 0.05);
+}
+// Azimut lekeliliği: dönen sıcak noktalar. Sgr A*'ın EHT görüntüsündeki
+// "düzensiz parlak lekeler" — gaz ufkun çevresini dakikalar içinde dolandığı
+// için görüntü çekim sürerken değişir; burada da leke deseni sürekli döner.
+float diskPatchF(vec2 xz, float rr, float n){
+  if(uDiskPatch.x <= 0.001) return 1.0;
+  float ang = atan(xz.y, xz.x);
+  float w = uTime*uDiskPatch.y*TAU;
+  float p = 0.5+0.5*sin(mod(2.0*ang - w + rr*1.15 + n*4.0, TAU));
+  float q = 0.5+0.5*sin(mod(3.0*ang - w*1.7 - rr*0.8, TAU));
+  return max(1.0 + uDiskPatch.x*(1.35*p*q - 0.45), 0.05);
+}
 // hp: örnek noktası (y ≠ 0 olabilir — hacim örneği), H: yerel yarı kalınlık,
 // dsl: bu örneğin temsil ettiği ışın yolu uzunluğu (hacim entegrasyon ağırlığı)
 void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
@@ -100,6 +144,8 @@ void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
   float E = fade * (0.07 + 1.6*pow(n,1.7)) * (0.45+0.55*streak) * (0.62+0.38*fil) * pow(uDiskIn/rr, 3.1) * 10.5;
   // Novikov–Thorne: yüksek spin → yüksek verim → daha parlak, daha beyaz iç disk
   E *= (0.85 + 2.2*uEff);
+  // gözlenmiş karakter: Eddington oranı, limit-cycle, sıcak nokta lekeleri
+  E *= uDiskGlow * diskFlicker(rr) * diskPatchF(hp.xz, rr, n);
   vec3 td = normalize(vec3(-hp.z, 0., hp.x));
   // yerel statik gözlemcinin ölçtüğü dairesel yörünge hızı — Newton'un
   // √(M/r)'si DEĞİL: v = √(M/r)/√(1−rs/r); ISCO'da (3 rs) tam c/2.
@@ -175,10 +221,67 @@ void sampleAtmo(vec3 hp, vec3 vn, float H, float ds, inout vec4 acc){
   float tRel = 2.77 * pow(xIn, 0.75) * pow(max(1.-sqrt(xIn), 0.), 0.25) * dop * gfac;
   vec3 c = mix(diskRamp(rr), bbRamp(tRel), uRealism);
   float E = D * gz * (ds/H) * 0.5 * boost * (0.85 + 2.2*uEff);
+  E *= uDiskGlow * diskFlicker(rr) * diskPatchF(hp.xz, rr, lump);
   acc.rgb += (1.-acc.a)*c*E;
   acc.a  += (1.-acc.a)*clamp(E*.4,0.,.9)*.7;
 }
+// ---------------------------------------------------------------------------
+// JET — dönme ekseni (±y) boyunca kollime plazma huzmesi.
+// Precession varsa eksen bir koni çizer; madde balistik gittiği için verilen
+// yükseklikteki faz geride kalır (h·uJetC.x) ⇒ gökyüzünde düz çizgi değil
+// SARMAL görünür. SS 433'ün imzası budur (koni 19,85°, periyot 162,4 gün).
+// ---------------------------------------------------------------------------
+vec2 jetAxis(float h, float sgn){
+  if(uJetB.z <= 0.0001) return vec2(0.);
+  float ph = mod(uTime*uJetB.w - h*uJetC.x, TAU);
+  return sgn * uJetB.z * h * vec2(cos(ph), sin(ph));
+}
+void sampleJet(vec3 hp, vec3 vv, float dt, inout vec4 acc){
+  float h = abs(hp.y);
+  if(h < uJetB.x || h > uJetB.y) return;
+  float sgn = hp.y < 0. ? -1. : 1.;
+  vec2 ax = jetAxis(h, sgn);
+  float rad = uJetA.z + uJetA.w*(h - uJetB.x);
+  vec2 d = hp.xz - ax;
+  float q = dot(d,d)/(rad*rad);
+  if(q > 7.0) return;                       // koninin dışı: maliyet sıfır
+  // içi boş koni kabuğu: jetin kenarı ortasından parlak görünür (limb
+  // brightening — M87*'nin jetinde doğrudan gözlendi). uJetC.w kolimasyonu.
+  float rq = sqrt(q);
+  float core = exp(-q*uJetC.w) * (0.55 + 0.75*exp(-pow((rq-0.95)*2.2, 2.0)));
+  // sinkrotron düğümleri: jet boyunca ilerleyen parlak topaklar
+  // (M87'nin HST-1'i, 3C 273'ün A/B düğümleri, GRS 1915'in fırlattığı bulutlar)
+  float kn = 0.5 + 0.5*sin(mod(h*uJetC.y - uTime*uJetC.z*TAU, TAU));
+  float turb = 0.55 + 0.45*vnoise(vec2(h*1.7, atan(d.y, d.x)*1.9) + uTime*0.02);
+  // genişleyen akışta yüzey parlaklığı düşer; uçta yumuşak sönüm
+  float prof = pow(uJetB.x/max(h, uJetB.x), 0.9) * smoothstep(uJetB.y, uJetB.y*0.55, h);
+  float sp = max(length(vv), 1e-5);
+  vec3 vn = vv/sp;
+  // relativistik hüzmeleme: ĵ = kaynaktan dışa birim vektör; geriye ışın
+  // izlediğimiz için gözlemciye giden foton yönü −vn'dir
+  vec3 jd = normalize(vec3(ax.x, sgn*max(h,1e-3), ax.y));
+  float b = clamp(uJetA.y, 0., 0.9995);
+  float g = 1./sqrt(1.-b*b);
+  float dop = 1./(g*(1. - b*dot(jd, -vn)));
+  // sürekli jet: I ∝ δ^(2+α), α ≈ 0.7 (Blandford & Königl 1979) — bu üs
+  // tek başına M87*/3C 273'te karşı jetin neden görünmediğini açıklar.
+  // δ·γ ile normalize: DİK bakışta (δ = 1/γ) çarpan tam 1 olur, yani taban
+  // pozlaması kamera açısından bağımsızdır; yaklaşan/uzaklaşan kol arasındaki
+  // δ^2.7 oranı olduğu gibi korunur. Fizik değil, kamera pozlamasıdır —
+  // normalizasyonsuz jet ekvatordan bakıldığında 150 kat sönük, yani görünmez.
+  float E = uJetA.x * core * kn * turb * prof * pow(dop*g, 2.7) * (dt*sp) * 0.45;
+  E = min(E, 4.0);
+  acc.rgb += (1.-acc.a)*uJetColor*E;
+  acc.a  += (1.-acc.a)*clamp(E*0.30, 0., 0.55);
+}
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.); }
+vec3 finish(vec3 col, vec2 ndc){
+  col = aces(col);
+  col = pow(col, vec3(0.4545));
+  col += (hash12(gl_FragCoord.xy*.73)-.5)*0.012;   // dither: bantlaşmayı siler
+  float vig = 1.-0.32*pow(length(ndc*vec2(1.,.8)),2.6);
+  return col*vig;
+}
 void main(){
   vec2 ndc = vUv*2.-1.;
   vec4 vp = uProjInv*vec4(ndc,-1.,1.); vp/=vp.w;
@@ -196,21 +299,68 @@ void main(){
   vec4 acc = vec4(0.);
   // uzak ışınlar (etki parametresi > 17 rs) neredeyse bükülmez: analitik düz
   // yol — aynı görüntü, maliyetin küçük bir kısmı; uzaklaşınca GPU yükü sabit
+  // Uzak ışınlar (etki parametresi > 17 rs) neredeyse bükülmez: analitik düz
+  // yol — aynı görüntü, maliyetin küçük bir kısmı; uzaklaşınca GPU yükü sabit
   if(h2 > 289.0){
-    if(abs(v.y) > 1e-5){
-      float t = -p.y/v.y;
-      if(t > 0.){
-        vec3 hp = p + v*t;
-        float rr = length(hp.xz);
-        if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, v, Hh, 2.0*Hh, acc); }
+    float td = (abs(v.y) > 1e-5) ? -p.y/v.y : -1.;   // disk düzlemi kesişimi
+    bool diskDone = false;
+    if(uJetA.x > 0.0){
+      // Bu dalda tek disk kesişimi jeti yakalayamaz (huzme dikeydir ve büyük
+      // etki parametreli ışınların çoğu tam ondan geçer). Jeti kapsayan
+      // silindirle kesiştirip yalnız o aralıkta düz bir marş yaparız.
+      float Rj = uJetB.z*uJetB.y + uJetA.z + uJetA.w*uJetB.y + 0.8;
+      float Lj = uJetB.y;
+      vec2 o = p.xz, dxz = v.xz;
+      float A = dot(dxz,dxz), B = dot(o,dxz), Cc = dot(o,o) - Rj*Rj;
+      float disc = B*B - A*Cc;
+      float t0 = 0., t1 = -1.;
+      if(disc > 0. && A > 1e-7){
+        float sq = sqrt(disc);
+        t0 = max((-B-sq)/A, 0.);
+        t1 = (-B+sq)/A;
+      } else if(A <= 1e-7 && Cc < 0.){
+        t0 = 0.; t1 = uEsc;                 // ışın silindire paralel ve içinde
       }
+      if(abs(v.y) > 1e-5){
+        float ta = (-Lj - p.y)/v.y, tb = (Lj - p.y)/v.y;
+        t0 = max(t0, min(ta,tb)); t1 = min(t1, max(ta,tb));
+      } else if(abs(p.y) > Lj){ t1 = -1.; }
+      // disk jetten öndeyse önce onu birikime kat (doğru ön-arka sıralama)
+      if(t1 > t0 && td > 0. && td < t0){
+        vec3 hp = p + v*td; float rr = length(hp.xz);
+        if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, v, Hh, 2.0*Hh, acc); }
+        diskDone = true;
+      }
+      // Adım MESAFEYE göre seçilir (küre izleme benzeri): huzme ekseni her
+      // yükseklikte analitik bilindiğinden uzaktayken büyük, içindeyken huzme
+      // çapı kadar adım atılır. Sabit adım, SS 433'ün 13 birim yarıçaplı
+      // precession hacminde 0.5 birimlik sarmalı benekli tarıyordu.
+      float t = t0;
+      for(int k=0;k<64;k++){
+        if(t >= t1 || acc.a > 0.985) break;
+        vec3 hp = p + v*t;
+        float hh = abs(hp.y);
+        float rj = max(uJetA.z + uJetA.w*max(hh-uJetB.x, 0.), 0.05);
+        vec2 ax = jetAxis(hh, hp.y < 0. ? -1. : 1.);
+        float dd = length(hp.xz - ax);
+        float st = clamp(0.6*(dd - 2.2*rj), 0.75*rj, 3.0);
+        if(!diskDone && td >= t && td < t + st){
+          diskDone = true;
+          vec3 hd = p + v*td; float rr = length(hd.xz);
+          if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hd, v, Hh, 2.0*Hh, acc); }
+        }
+        if(dd < 2.8*rj) sampleJet(hp, v, min(st, t1-t), acc);
+        t += st;
+      }
+    }
+    if(!diskDone && td > 0.){
+      vec3 hp = p + v*td;
+      float rr = length(hp.xz);
+      if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, v, Hh, 2.0*Hh, acc); }
     }
     // pozlama ödünü: gerçekçi modda disk parlaklığı yıldızları bastırır
     vec3 cf = acc.rgb + (1.-acc.a)*stars(v)*mix(1.0, 0.12, uRealism);
-    cf = aces(cf); cf = pow(cf, vec3(0.4545));
-    cf += (hash12(gl_FragCoord.xy*.73)-.5)*0.012;
-    float vf = 1.-0.32*pow(length(ndc*vec2(1.,.8)),2.6);
-    gl_FragColor = vec4(cf*vf, 1.); return;
+    gl_FragColor = vec4(finish(cf, ndc), 1.); return;
   }
   bool captured = false;
   bool escaped = false;
@@ -228,7 +378,21 @@ void main(){
     // dış bölgede merkezden VE disk düzleminden uzaklaşan ışın bir daha
     // kesişemez (240 ≈ (R_OUT+2)²): kalan zayıf bükülme uEsc'e kadar süren
     // eski yürüyüşte de ihmal ediliyordu — erken çık, yıldıza git
-    if(r2 > 240.0 && p.y*v.y > 0. && dot(p,v) > 0.){ escaped=true; break; }
+    // Işın huzmeye BİR DAHA giremiyorsa eski ucuz eşikle çıkabilir. Huzme
+    // yükseklikle (precession konisi + alevlenme) şu hızda genişler:
+    // (tanα + flare)·|v_y|; ışın radyal olarak bundan hızlı uzaklaşıyorsa
+    // koni onu bir daha yakalayamaz. Kaba bir silindir testi SS 433'te 14
+    // birim yarıçap verip her ışını 150 adım boyunca yürütüyordu (46 → 30 fps).
+    bool jetAhead = false;
+    if(uJetA.x > 0.0){
+      float hh = abs(p.y);
+      float rjH = (uJetB.z + uJetA.w)*hh + uJetA.z + 1.0;
+      float lxz = max(length(p.xz), 1e-4);
+      bool leaving = lxz > rjH && dot(p.xz,v.xz)/lxz > (uJetB.z + uJetA.w)*abs(v.y);
+      bool above = hh > uJetB.y && p.y*v.y > 0.;
+      jetAhead = !leaving && !above;
+    }
+    if(!jetAhead && r2 > 240.0 && p.y*v.y > 0. && dot(p,v) > 0.){ escaped=true; break; }
     float dt = (0.045 + 0.065*max(r-1.6, 0.)) * stepScale * dtBoost;
     vec3 a = -1.5*h2*p/(r2*r2*r);
     vec3 pPrev = p;
@@ -252,6 +416,32 @@ void main(){
         }
       }
     }
+    // jet, bükülmüş ışının üstünde adım adım entegre edilir: sıralama (ön/arka)
+    // ve lenslenme kendiliğinden doğru çıkar. Koni dışında maliyet ~0.
+    // Dış bölgede dt ≈ 0.8–1.9 birim, huzme çapı ise ~1–2: tek örnek benekli
+    // çıkardı. Adımı BÖLMEK yerine adım İÇİNDE 3 alt örnek alınır — adım
+    // bütçesi (uSteps) hiç tüketilmez, koni dışında üç ucuz erken dönüş olur.
+    if(uJetA.x > 0.0 && acc.a < 0.985){
+      // Önce TEK kaba test: adımın süpürdüğü aralık huzmeye değmiyorsa üç
+      // çağrının kurulum maliyeti ödenmez. Test huzme EKSENİNE (helix üstünde
+      // bir nokta) göre yapılır — precession konisini kapsayan silindire göre
+      // değil: SS 433'te o silindir 14 birim yarıçapındadır ve kapıyı işlevsiz
+      // bırakıp her adımda üç örnek aldırıyordu.
+      float hh = abs(p.y);
+      float rj = uJetA.z + uJetA.w*max(hh - uJetB.x, 0.) + dt;
+      // 1. kapı (sin/cos YOK): precession konisinin en dış yarıçapı. Işın
+      // bunun dışındaysa helix ekseni hesaplanmaz bile.
+      float rOut = uJetB.z*hh + 2.7*rj;
+      if(hh < uJetB.y + dt && dot(p.xz,p.xz) < rOut*rOut){
+        // 2. kapı: gerçek helix eksenine uzaklık — koniyi kapsayan silindir
+        // SS 433'te 14 birim yarıçapındadır, tek başına hiçbir şey elemez
+        vec2 axG = jetAxis(hh, p.y < 0. ? -1. : 1.);
+        if(dot(p.xz-axG, p.xz-axG) < 7.3*rj*rj){
+          float sub = dt/3.0;
+          for(int k=0;k<3;k++) sampleJet(p - v*(sub*float(k)), v, sub, acc);
+        }
+      }
+    }
     if(acc.a > 0.99) break;
   }
   // disk pikseli neredeyse opaksa yıldız alanını hiç hesaplama:
@@ -259,7 +449,11 @@ void main(){
   // !escaped: adım bütçesi foton halkası civarında dolanırken biten ışın —
   // yönü yarı-yörüngede rastgeledir; yıldız örneklemek gölgenin üstüne
   // sahte yıldız/çizgi serpiyordu. Bu bant ufka mahkûm bölgedir: siyah.
-  vec3 bg = (captured || !escaped || acc.a > 0.985) ? vec3(0.) : stars(normalize(v))*mix(1.0, 0.12, uRealism);
+  // !escaped: adım bütçesi bitmiş ışın. Yakın bölgede (r < 8) bu, foton
+  // halkası çevresinde dolanan ve ufka mahkûm ışındır: siyah. Uzakta ise
+  // yalnız bütçe tükenmiştir (jet boyunca yürüyen ışın) — yıldızını görsün.
+  bool lost = !escaped && !captured && dot(p,p) < 64.0;
+  vec3 bg = (captured || lost || acc.a > 0.985) ? vec3(0.) : stars(normalize(v))*mix(1.0, 0.12, uRealism);
   vec3 col = acc.rgb + (1.-acc.a)*bg;
   if(!captured){
     // bu iki terim KOZMETİKTİR (sanatsal halo) — gerçekçi modda bastırılır:
@@ -270,11 +464,7 @@ void main(){
     col += mix(vec3(1.05,.92,.75), vec3(.9,.95,1.2), uRealism)
          * mix(0.5, 0.10, uRealism) * exp(-pow((minR-1.55)*mix(5.5, 9.0, uRealism),2.));
   }
-  col = aces(col);
-  col = pow(col, vec3(0.4545));
-  col += (hash12(gl_FragCoord.xy*.73)-.5)*0.012;   // dither: gradyan bantlaşmasını siler
-  float vig = 1.-0.32*pow(length(ndc*vec2(1.,.8)),2.6);
-  gl_FragColor = vec4(col*vig, 1.);
+  gl_FragColor = vec4(finish(col, ndc), 1.);
 }
 `
 
@@ -288,6 +478,16 @@ export type LensUniforms = {
   uDiskIn: THREE.IUniform<number>
   uEff: THREE.IUniform<number>
   uRealism: THREE.IUniform<number>
+  uDiskThick: THREE.IUniform<number>
+  uDiskGlow: THREE.IUniform<number>
+  uDiskVar: THREE.IUniform<THREE.Vector2>
+  uDiskPatch: THREE.IUniform<THREE.Vector2>
+  uNebColor: THREE.IUniform<THREE.Vector3>
+  uNebPar: THREE.IUniform<THREE.Vector2>
+  uJetA: THREE.IUniform<THREE.Vector4>
+  uJetB: THREE.IUniform<THREE.Vector4>
+  uJetC: THREE.IUniform<THREE.Vector4>
+  uJetColor: THREE.IUniform<THREE.Vector3>
 }
 
 export function createLensUniforms(): LensUniforms {
@@ -301,5 +501,15 @@ export function createLensUniforms(): LensUniforms {
     uDiskIn: { value: 2.35 },
     uEff: { value: 0.06 },
     uRealism: { value: 0 },
+    uDiskThick: { value: 1 },
+    uDiskGlow: { value: 1 },
+    uDiskVar: { value: new THREE.Vector2(0, 0) },
+    uDiskPatch: { value: new THREE.Vector2(0, 0) },
+    uNebColor: { value: new THREE.Vector3(0.028, 0.01, 0.006) },
+    uNebPar: { value: new THREE.Vector2(1, 1) },
+    uJetA: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uJetB: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uJetC: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uJetColor: { value: new THREE.Vector3(0.8, 0.88, 1.1) },
   }
 }

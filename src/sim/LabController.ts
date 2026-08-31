@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { LAB_TIME_SCALE, SIM_SPEED } from '../physics/constants'
-import type { BlackHolePreset } from '../physics/presets'
+import type { BlackHolePreset, HoleVisual } from '../physics/presets'
 import type {
   BodyRegistry,
   FocusTelemetry,
@@ -135,6 +135,13 @@ export class LabController implements LabCommands, SnapshotSource {
     this.focus = null
     this.hint = `${next.name} yüklendi — ${next.desc}`
     this.publish()
+  }
+
+  /** Aktif deliğin GÖZLENMİŞ görsel imzası (disk tipi, değişkenlik, jet,
+   * bulutsu) — shader uniform'larına birebir gider. Referans döner: kare
+   * döngüsünde nesne ayırmaz. */
+  get holeVisual(): HoleVisual {
+    return this.preset.visual
   }
 
   /** Görsel katmanın (shader) okuduğu, deliğe özgü GERÇEK türetimler. */
