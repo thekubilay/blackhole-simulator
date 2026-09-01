@@ -41,3 +41,50 @@ gerekirse `bakeInverseRadius`'un phi aralığı bizim tablomuz olduğu için gen
 Not: `kesisim.mjs`/`kesisim2.mjs` (Bruneton'un mod-π iki-görüntü şemasının bizde
 neden ÇALIŞMADIĞINI gösteren ara adımlar) tarihçe olarak hafızada; şemanın
 varsayımı kameranın diskin dışında olması, bizim kamera disk kenarında.
+
+## Faz B3 — 𝕌'nun φ ekseni artık bizim (2026-09-01)
+
+Bruneton'un `phi_ub = (1+e²)/(1/3 + 2e²√e²)` eksen tavanı apsisi OLMAYAN
+ışınlarda (e² ≥ KMU, yani YAKALANANLAR) ufka varmadan kesiliyordu. Sonuç:
+gölge önündeki diskin kesişimlerinin %34'ü tablonun dışında kalıyor, o
+pikseller 240 adımlık marşa düşüyordu — karenin ~%10'u.
+
+| betik | ne kanıtlar |
+|---|---|
+| `phiaralik.mjs` | teşhis: φ_end/φ_ub oranı (e² ≥ KMU'da her yerde > 1, KMU'da ıraksar); gerçek kadrajlarda karenin %9.9'u yakalanan, bunların bant kesişimlerinin %34.2'si phi_ub kapsamı dışında |
+| `b3shader.mjs` | **GÜNCEL GÜVENLİK AĞI** — shader'ın B2/B3 dalının birebir transliterasyonu, dört bağımsız taramaya karşı. `ESKI=1` eski yolu, `ESKIISARET=1` yalnız işaret düzeltmesini geri alıp ölçer |
+
+**Çözüm — yeni tabloya GEREK YOK.** Doğru tavan φ_end (ışının apsise ya da
+UFKA varana dek süpürdüğü açı) ve Δ = φ − atan2(u, u̇) özdeşliği sayesinde
+𝔻'nin ZATEN ÇEKİLEN son satırından analitik çıkıyor:
+`φ_end = Δ_son + (apsis ? π/2 : atan(1/e))`. Ek doku, ek fetch yok.
+Bağımsız RK4'e karşı fark ≤ 0.08 mrad.
+
+**İki kritik ayrıntı** (ikisi de ölçümle bulundu, tahminle değil):
+
+1. **𝕌'nun SÜTUN ekseni 𝔻'ninkiyle aynı olmalı (`deflTexU`).** Eski
+   `1/(1+6e²)` ekseninde KMU tam ORTADA kalıyor ve bilineer aradeğer apsisli
+   bir sütunla (e²=0.1449) apsissiz bir sütunu (e²=0.1492) karıştırıyordu —
+   ikisinin φ ekseni 2 kat farklı. Kesişim YÖNÜ 100° sapıyordu. `deflTexU`
+   KMU'yu dokunun iki UCUNA koyar: aradeğer o sınırı asla geçmez.
+2. **Apsisi olmayan DIŞA giden ışında (e² ≥ KMU, u̇ < 0) tablo eğrisi GERİ
+   kat edilir** (`φ = φ_c − ψ`, `φ_c = Δ_ham + δ`). Eski kod orada da apsis
+   yansıtması uyguluyordu ve apsis yoktu. Deliğe BAKAN kadrajlarda bu dala
+   hiç uğranmıyor, o yüzden B2 doğrulamasında görünmemişti; deliğe sırtını
+   dönmüş kamerada (serbest bakış) disk bandı kesişimlerinin TAMAMI
+   (2436/2436) kayboluyordu.
+
+**Sevk edilen yapılandırma: 𝕌 128×64, PHI_CAP 16.** Kapak φ_end'in KMU'da
+ıraksaması için; 16 = ψ = α + kπ döngüsünün (k < 6) sorabileceği en büyük φ.
+
+| ölçüm (b3shader.mjs) | eski B2 | yeni B3 |
+|---|---|---|
+| marşa düşen piksel | %10.0 | **%0** |
+| disk bandı kesişimi: eksik / sahte | 20 / 0 | **0 / 0** |
+| yarıçap bağıl hata medyan (p99) | %0.070 (%0.38) | **%0.009 (%0.03)** |
+| kesişim yönü medyan (p99) | 0.61 (21.2) mrad | **0.07 (3.1) mrad** |
+| 𝕌 pişirme süresi | 124 ms (64×32, Euler) | **26 ms** (128×64, RK4) |
+
+Tarayıcı ölçümü (M1 Pro, 'yüksek', 2.89 Mpix, bloom açık, zaman dondurulmuş,
+aynı kamera; marş referansı iki koşumda %1 içinde eşleşiyor):
+**11.55 ms → 8.55 ms (1.35×)**; aynı karede tam marş 30.85 ms.

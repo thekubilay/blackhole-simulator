@@ -393,23 +393,39 @@ vec2 fetch2(sampler2D t, vec2 sz, vec2 tc){
  * apsis = son satır: e² < KMU ise apsisteki sapma, değilse UFUKTAKİ sapma.
  * Yakalama kararını ve hangi bacakta olduğumuzu çağıran yorumlar.
  */
-void tableRaw(float u, float e2, out float raw, out float apsis){
-  float tx = texco(deflTexU(e2), 512.0);
+void tableRaw(float u, float e2, float dtu, out float raw, out float apsis){
+  float tx = texco(dtu, 512.0);
   apsis = fetch2(uDeflTex, vec2(512.0), vec2(tx, texco(1.0, 512.0))).x;
   raw = fetch2(uDeflTex, vec2(512.0), vec2(tx, texco(deflTexV(e2, u), 512.0))).x;
 }
-float phiUbT(float e2){ return (1.0 + e2)/(1.0/3.0 + 2.0*e2*sqrt(e2)); }
-/** Işının φ açısındaki ters yarıçapı — disk düzlemi kesişimini sabit zamanda verir */
-float tableInvRad(float e2, float phi){
-  return fetch2(uInvRTex, vec2(64.0, 32.0),
-                vec2(texco(1.0/(1.0 + 6.0*e2), 64.0),
-                     texco(clamp(phi/phiUbT(e2), 0.0, 1.0), 32.0))).x;
+/**
+ * 𝕌'nun φ EKSEN TAVANI: ışının sonsuzdan apsise (e² < KMU) ya da ufka
+ * (e² ≥ KMU) varana dek süpürdüğü açı. Δ = φ − atan2(u, u̇) olduğundan
+ * 𝔻'nin ZATEN ÇEKİLEN son satırından analitik çıkar — ek doku yok, ek
+ * fetch yok. Eskiden burada Bruneton'un φ_ub'si vardı; o apsisi olmayan
+ * ışınlarda ufka varmadan kesiliyor ve gölge önündeki diskin %34'ünü
+ * kaybettiriyordu (ölçüm: scripts/bruneton-dogrulama/phiaralik.mjs).
+ * PHI_CAP: φ_end e² → KMU'da ıraksar; 16, ψ = α + kπ (k < 6) döngüsünün
+ * sorabileceği en büyük φ'dir, yani pratikte hiçbir ışını kesmez.
+ */
+#define PHI_CAP 16.0
+float phiEndT(float e2, float deflEnd){
+  return deflEnd + (e2 < KMU ? PI_*0.5 : atan(1.0/sqrt(e2)));
+}
+/** Işının φ açısındaki ters yarıçapı — disk düzlemi kesişimini sabit zamanda
+ *  verir. Sütun koordinatı 𝔻'ninkiyle AYNI (dtu = deflTexU(e²), çağıran
+ *  zaten hesaplamış): KMU dokunun uçlarına düşer, bilineer aradeğer apsisli
+ *  bir sütunla apsissiz bir sütunu asla karıştırmaz. */
+float tableInvRad(float dtu, float phi, float PH){
+  return fetch2(uInvRTex, vec2(128.0, 64.0),
+                vec2(texco(dtu, 128.0),
+                     texco(clamp(phi/PH, 0.0, 1.0), 64.0))).x;
 }
 
 /** TraceRay'in sapma kısmı. Dönüş < 0 ise ışın ufka düşer. */
-float tableDefl(float u, float ud, float e2, out float apsisDefl){
+float tableDefl(float u, float ud, float e2, float dtu, out float apsisDefl){
   float raw;
-  tableRaw(u, e2, raw, apsisDefl);
+  tableRaw(u, e2, dtu, raw, apsisDefl);
   if(e2 < KMU && u > 2.0/3.0) return -1.0;
   float d = raw;
   // DÖNÜŞ DEĞERİ "KALAN" SAPMADIR (kameradan sonsuza) — kaçış yönü δ' = δ + Δ_kalan
@@ -465,12 +481,19 @@ void main(){
       float u = 1.0/r0;
       float ud = -u/tan(delta);
       float e2 = ud*ud + u*u*(1.0 - u);
+      // 𝔻 ve 𝕌 AYNI sütun eksenini kullanır: bir kez hesapla, üç yerde kullan
+      float dtu = deflTexU(e2);
       float apsisDefl;
-      float defl = tableDefl(u, ud, e2, apsisDefl);
+      float defl = tableDefl(u, ud, e2, dtu, apsisDefl);
       // minR ANALİTİK: içe giden ışının en yakın yaklaşımı apsistir, dışa
       // gidenin ise başladığı yer. Marş bunu adım adım biriktiriyordu.
       float minR = ud > 0.0 ? 1.0/uApsisT(e2) : r0;
-      bool march = defl < 0.0 || uJetA.x*uRealism > 0.0;
+      bool jetOn = uJetA.x*uRealism > 0.0;
+      bool esc = defl >= 0.0;
+      // B2 artık YAKALANAN ışını da sahipleniyor (𝕌'nun ekseni ufka kadar
+      // uzandığı için): gölge, karenin %10'u, marştan tümüyle kalktı.
+      bool b2On = uB2 > 0.5 && !jetOn;
+      bool march = jetOn || (!esc && !b2On);
       // MUHAFAZAKÂR ATLAMA TESTİ — asla yanlış atlamaz (ölçüldü: üç kamera
       // konumunda 8192'şer piksel, sıfır yanlış). Yalnız KESİN büyüklükler:
       //   • minR bandın dışındaysa ışın diske hiç yaklaşamaz;
@@ -482,7 +505,10 @@ void main(){
       // kamera r≈13.4, disk dış yarıçapı 13.5 — tam kenarında. Denendi, diskin
       // dış kenarında iki simetrik siyah kama üretti (kesişimlerin %14'ü yanlış
       // temsilciye düşüyor, bir kısmı da φ_ub tablo sınırının dışında kalıyor).
-      if(!march && minR <= R_OUT + 0.5){
+      // 'esc' ŞART: test ψ_max = δ + Δ_kalan'a dayanır, yakalanan ışında
+      // Δ_kalan = −1'dir (yakalama işareti) ve test anlamsızlaşır. Yakalanan
+      // ışın zaten doğrudan B2'ye gider.
+      if(!march && esc && minR <= R_OUT + 0.5){
         vec3 td = cross(vec3(0., 1., 0.), ez);
         float tdl = length(td);
         if(tdl > 1e-5){                       // düzlemler paralel değilse
@@ -508,30 +534,47 @@ void main(){
       // r = 1/𝕌(e², φ). Hacimli örnekleme bu noktaya çapalanır — marşın
       // yaptığının aynısı, ama adım adım yürümeden.
       //
-      // Doğrulandı (scripts/bruneton-dogrulama/kesisimB2.mjs + b2yakalanan.mjs):
-      // kaçan ışında 2888/2916 kesişim, yarıçap medyan %0.098, konum 0.0097
-      // birim, YÖN medyan 0.795 mrad; yakalanan ışında %0.036 / 0.0022 birim.
-      // YAKALANAN IŞIN B2'YE GİRMEZ, marşa düşer. Sebep 𝕌 tablosunun kapsamı:
-      // φ_ub = (1+e²)/(1/3 + 2e²√e²) apsisi olmayan (e² ≥ KMU) ışınlarda çok
-      // dar — e² = 1 için yalnız φ ∈ [0, 0.86]. Gölgenin ÖNÜNDEKİ disk kesişimi
-      // ise çok daha büyük φ'de düşüyor, döngü 'pub'da kırılıyor ve o disk hiç
-      // çizilmiyordu. Ekranda gölgenin üstünde disk düzlemine hizalı, kenardan
-      // görülen düz bir kesik olarak çıkıyor (kullanıcı ekran görüntüsü,
-      // 2026-09-01). Ölçüm: yakalanan ışınlarda bant kesişimlerinin %34'ü
-      // kayboluyordu (b2yakalanan.mjs). Kalıcı çözüm 𝕌'yu kendi φ aralığımızla
-      // pişirmek (tablo bizim), ama o ayrı bir iş — şimdilik marş doğru sonucu
-      // veriyor ve gölge karenin küçük bir kısmı.
-      if(uB2 > 0.5 && uJetA.x*uRealism <= 0.0 && defl >= 0.0){
+      // Doğrulandı (scripts/bruneton-dogrulama/b3shader.mjs — bu dalın birebir
+      // JS karşılığı, 4 kamera × 6272 piksel × iki disk iç yarıçapı): disk
+      // bandında 15606 + 16928 kesişim, EKSİK 0, FAZLA 0, kaçış/yakalanma
+      // çelişkisi 0; yarıçap medyan %0.009 (p99 %0.03), YÖN medyan 0.07 mrad.
+      //
+      // FAZ B3: YAKALANAN IŞIN DA BURAYA GİRER. Eskiden giremiyordu çünkü
+      // Bruneton'un φ_ub'si apsisi olmayan (e² ≥ KMU) ışınlarda ufka varmadan
+      // kesiliyordu — e² = 1 için yalnız φ ∈ [0, 0.86] — ve gölgenin ÖNÜNDEKİ
+      // disk kesişimi çok daha büyük φ'de düştüğü için hiç çizilmiyordu
+      // (ölçüm: bant kesişimlerinin %34'ü kayıp). Artık eksen tavanı φ_end,
+      // yani ışının apsise/UFKA varana dek süpürdüğü gerçek açı: gölge de
+      // tablodan çıkıyor, marş yalnız jete kaldı.
+      if(b2On){
         // BİRİKMİŞ sapma (sonsuzdan kameraya) — tableDefl'in döndürdüğü KALAN
-        // sapmanın tersi. İçe giden ışın ham değeri, dışa giden 2Δ_apsis − ham.
+        // sapmanın tersi.
         float raw, ap2;
-        tableRaw(u, e2, raw, ap2);
-        float dAcc = ud > 0.0 ? raw : 2.0*ap2 - raw;
-        float phiC = dAcc + PI_ - delta;
+        tableRaw(u, e2, dtu, raw, ap2);
+        bool apsisVar = e2 < KMU;
+        float phiC, sgnPhi;
+        if(apsisVar){
+          // Apsis etrafında katlanan eğri: içe giden ham, dışa giden 2Δ_apsis − ham.
+          phiC = (ud > 0.0 ? raw : 2.0*ap2 - raw) + PI_ - delta;
+          sgnPhi = 1.0;
+        } else {
+          // APSİS YOK: tablo eğrisi TEK YÖNLÜ (u = 0'dan ufka). İçe giden ışın
+          // eğriyi ileri kat eder, DIŞA giden GERİ. Kilit özdeşlik atan2(u,u̇)
+          // = π − δ; dışa gidende kameranın içe-giden daldaki açısı raw + δ'dır.
+          // Eski kod burada da apsis yansıtması (2Δ_apsis − ham) uyguluyordu ve
+          // apsis yoktu: ölçüldü (b3shader.mjs 'dışa bakan tarama'), deliğe
+          // sırtını dönmüş kamerada disk bandı kesişimlerinin TAMAMI (2436/2436)
+          // kayboluyordu. Deliğe bakan kadrajlarda bu dala hiç uğranmadığı için
+          // B2 doğrulamasında görünmemişti.
+          phiC = raw + (ud > 0.0 ? PI_ - delta : delta);
+          sgnPhi = ud > 0.0 ? 1.0 : -1.0;
+        }
         float phiA = ap2 + PI_*0.5;          // apsisin tablo açısı (e² < KMU ise)
-        float pub  = phiUbT(e2);
-        bool esc   = defl >= 0.0;
-        float psiMax = esc ? delta + defl : 1e9;   // yakalananda sınır ufuk
+        float phiEnd = phiEndT(e2, ap2);     // apsise/ufka varış açısı
+        float pub  = min(phiEnd, PHI_CAP);   // 𝕌'nun eksen tavanı
+        bool kapakli = phiEnd > PHI_CAP;     // tablo uca ULAŞMIYOR
+        // Yakalanan ışında sınır ufuktur: ışın φ_end'de biter.
+        float psiMax = esc ? delta + defl : phiEnd - phiC;
         bool tam = true;                    // kesişim sayımı eksiksiz mi
         vec3 td2 = cross(vec3(0., 1., 0.), ez);
         float tdl2 = length(td2);
@@ -539,21 +582,26 @@ void main(){
           td2 /= tdl2;
           if(dot(td2, ey) < 0.0) td2 = -td2;
           float alpha2 = acos(clamp(dot(pr, td2), -1.0, 1.0));
-          // B2 yalnız TAM ÇÖZEBİLDİĞİ pikseli sahiplenir. Kesişim sayımı
-          // tablo kapsamı yüzünden yarıda kalırsa (phiE > pub) sonuç eksik
-          // olur — o piksel marşa bırakılır. Gölge KENARINDA olduğu için
-          // görsel bedeli yüksek, sayıca ise küçük (8320 pikselde 10).
+          // B2 yalnız TAM ÇÖZEBİLDİĞİ pikseli sahiplenir; çözemediğini marşa
+          // bırakır. Bu artık YALNIZ kapaklanan sütunlarda (e² KMU'ya 1e-5
+          // kadar yakın) olabilir — ölçümde sıfır piksel.
           for(int k = 0; k < 6; k++){
             float psi = alpha2 + float(k)*PI_;
             if(psi >= psiMax) break;
-            float phi = phiC + psi;
+            float phi = phiC + sgnPhi*psi;
             // APSİS SİMETRİSİ: u(φ) apsis etrafında simetriktir. Yansıtma
             // olmadan kesişimlerin %20'si düşer — kamera disk kenarında
-            // olduğu için φ_c zaten φ_ub'ye yakın başlıyor.
-            float phiE = (e2 < KMU && phi > phiA) ? 2.0*phiA - phi : phi;
+            // olduğu için φ_c zaten tavana yakın başlıyor.
+            float phiE = (apsisVar && phi > phiA) ? 2.0*phiA - phi : phi;
             if(phiE < 0.0) break;             // ışın sonsuza kaçtı: sayım TAM
-            if(phiE > pub){ tam = false; break; }   // kapsam yetmedi: marşa bırak
-            float uk = tableInvRad(e2, phiE);
+            if(phiE > pub){
+              // Eksenin ötesi. Kapak devredeyse tablo orayı BİLMİYOR → marşa.
+              // Kapak yoksa eksen zaten apsise/ufka kadar uzanıyor demektir:
+              // ötesinde kesişim YOKTUR, sayım tamdır, bu k'yı atla.
+              if(kapakli){ tam = false; break; }
+              continue;
+            }
+            float uk = tableInvRad(dtu, phiE, pub);
             if(uk >= 1.0) break;              // ufka düştü
             float rr = 1.0/max(uk, 1e-6);
             if(rr > R_OUT + 0.5) continue;    // bandın dışında, katkı yok
@@ -566,8 +614,8 @@ void main(){
             // olduğumuz belirler. APSİSİ OLMAYAN ışında (e² ≥ KMU) dönüm
             // noktası yoktur — işaret ışın boyunca SABİTTİR ve kameranınkidir:
             // içe giden plonjeyi sürdürür, dışa giden hep dışa gider.
-            float sgnk = (e2 < KMU) ? (phi > phiA ? -1.0 : 1.0)
-                                    : (ud > 0.0 ? 1.0 : -1.0);
+            float sgnk = apsisVar ? (phi > phiA ? -1.0 : 1.0)
+                                  : (ud > 0.0 ? 1.0 : -1.0);
             float udk = sqrt(max(e2 + uk*uk*uk - uk*uk, 0.0)) * sgnk;
             vec3 vk = normalize(et - (udk/max(uk, 1e-6))*er);
             float Hh = diskH(rr);
@@ -582,8 +630,10 @@ void main(){
         }
         if(!tam){
           // Eksik sayım: B2'nin biriktirdiğini AT ve marşa düş. acc'ye bu
-          // noktaya kadar yalnız B2 yazdı, sıfırlamak güvenli.
+          // noktaya kadar yalnız B2 yazdı, sıfırlamak güvenli. 'march' burada
+          // AÇIKÇA kurulur: yakalanan ışında zaten false'tu (B2 sahiplenmişti).
           acc = vec4(0.);
+          march = true;
         } else {
         float minR2 = ud > 0.0 ? (e2 < KMU ? 1.0/uApsisT(e2) : 1.0) : r0;
         vec3 bg2 = vec3(0.);

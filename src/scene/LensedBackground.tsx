@@ -76,6 +76,8 @@ export function LensedBackground({
   // son uygulanan görsel imza: preset.visual sabit nesnedir, referans
   // karşılaştırması delik değişimini bedelsiz yakalar
   const appliedVisual = useRef<HoleVisual | null>(null)
+  // DEV ölçüm kancası; kimliği sabit kalsın diye ref'te tutulur (aşağıya bak)
+  const devHook = useRef<{ b2?: number; time?: number; uniforms?: LensUniforms }>({})
   useFrame(({ camera }) => {
     const uniforms = material.current?.uniforms as LensUniforms | undefined
     if (!uniforms) return
@@ -98,6 +100,27 @@ export function LensedBackground({
     uniforms.uSteps.value = governor.current.steps
     uniforms.uTables.value = tables ? 1 : 0
     uniforms.uB2.value = b2 ? 1 : 0
+    if (import.meta.env.DEV) {
+      // Ölçüm kancası (__bloom / __lab ile aynı desen). GÖRSEL A/B'nin TEK
+      // dürüst yolu: ?b2=0 sayfayı yeniler, yenileme hem simTime'ı hem dolly
+      // kamerasını kaydırır ve iki kare piksel piksel karşılaştırılamaz.
+      // `__lens.b2 = 0` ise AYNI karede, aynı zaman ve kamerayla tablo yolunu
+      // marşla yan yana koyar. TERS YÖN KAPALI: ?b2=0 ile açılan oturumda 𝕌
+      // dokusu hiç pişmemiştir (tembel getter), b2'yi elle açmak boş
+      // sampler'dan okutur — o yüzden yalnız doku varsa 1'e izin verilir.
+      // Nesne KARE BAŞINA YENİDEN KURULMAZ: ölçüm yaparken çöp üretmesin.
+      const w = window as unknown as Record<string, unknown>
+      const dev = devHook.current
+      if (w.__lens !== dev) w.__lens = dev
+      if (dev.b2 !== undefined && (dev.b2 < 0.5 || uniforms.uInvRTex.value)) {
+        uniforms.uB2.value = dev.b2
+      }
+      // `__lens.time = <sayı>` diski dondurur. A/B'nin ŞARTI: disk sürekli
+      // döndüğü için iki ardışık kare kendiliğinden %31 piksel farkı verir ve
+      // yol farkı o gürültünün altında kaybolur.
+      if (dev.time !== undefined) uniforms.uTime.value = dev.time
+      dev.uniforms = uniforms
+    }
     // deliğe özgü GERÇEK türetimler: disk iç kenarı = ISCO, verim η = 1 − E_ISCO
     uniforms.uDiskIn.value = controller.visual.diskIn
     uniforms.uEff.value = controller.visual.efficiency

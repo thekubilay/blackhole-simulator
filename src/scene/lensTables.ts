@@ -21,8 +21,17 @@ import * as THREE from 'three'
 export const KMU = 4 / 27
 export const DEFL_W = 512
 export const DEFL_H = 512
-export const INVR_W = 64
-export const INVR_H = 32
+export const INVR_W = 128
+export const INVR_H = 64
+/**
+ * 𝕌'nun φ ekseni e² → KMU'da IRAKSAR (ışın foton küresinde dolanır), o yüzden
+ * bir tavan gerekir. 16 seçildi: shader kesişim döngüsü ψ = α + kπ'yi k < 6
+ * için tarar, yani hiçbir ışın φ_c + 5π ≈ 16'nın ötesini SORAMAZ. Ölçüldü
+ * (b3shader.mjs, e²/KMU ∈ [0.90, 1.10] boyunca 14400 ışın): CAP 4'te ışınların
+ * %11.3'ü marşa düşüyor, 8'de %0.3, 16'da SIFIR — ve doğruluk düşmüyor, çünkü
+ * kapaklanan sütunlar e²'de KMU'ya 1e-5 kadar yakın, ölçülemez darlıkta.
+ */
+export const PHI_CAP = 16
 
 const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x))
 
@@ -52,8 +61,37 @@ function deflTexV(e2: number, u: number): number {
   return 1 - Math.sqrt(Math.max(1 - u / uApsis(e2), 0))
 }
 
-const phiUb = (e2: number) => (1 + e2) / (1 / 3 + 2 * e2 * Math.sqrt(e2))
-const invRadTexUInv = (tu: number) => (1 / tu - 1) / 6
+/** deflTexUInv'in tersi — 𝕌'nun sütun ekseni de bunu kullanır (aşağıya bak) */
+function deflTexU(e2: number): number {
+  return e2 < KMU
+    ? 0.5 - Math.sqrt(-Math.log(Math.max(1 - e2 / KMU, 1e-20)) * 0.02)
+    : 0.5 + Math.sqrt(-Math.log(Math.max(1 - KMU / e2, 1e-20)) * 0.02)
+}
+
+/**
+ * φ_end(e²): ışının sonsuzdan APSİSE (e² < KMU) ya da UFKA (e² ≥ KMU) varana
+ * dek süpürdüğü açı — 𝕌'nun doğru eksen tavanı. AYRI TABLOYA GEREK YOK:
+ * Δ = φ − atan2(u, u̇) olduğundan 𝔻'nin son satırından analitik çıkar.
+ *   • apsis: u̇ = 0        → φ_a = Δ_son + π/2
+ *   • ufuk : u = 1, u̇ = e → φ_h = Δ_son + atan(1/e)   (u̇² = e² + u³ − u²)
+ * Doğrulandı: bağımsız RK4 entegrasyonuna karşı fark ≤ 0.08 mrad, KMU'ya
+ * 1e-5 kadar yaklaşınca bile.
+ *
+ * Bruneton'un φ_ub'si (eskiden burada) apsisi OLMAYAN ışınlarda ufka varmadan
+ * kesiliyordu: ölçüldü (phiaralik.mjs), gölge önündeki disk kesişimlerinin
+ * %34'ü kapsam dışında kalıyor ve o piksel marşa düşüyordu.
+ */
+const phiEndFromDefl = (e2: number, deflEnd: number) =>
+  deflEnd + (e2 < KMU ? Math.PI / 2 : Math.atan(1 / Math.sqrt(e2)))
+
+/** 𝔻'nin son satırından örnekleme — shader'daki fetch2 + texco ile BİREBİR */
+function deflEndOf(defl: Float32Array, e2: number): number {
+  const x = clamp(deflTexU(e2), 0, 1) * (DEFL_W - 1)
+  const i0 = Math.floor(x)
+  const w = x - i0
+  const row = (DEFL_H - 1) * DEFL_W
+  return defl[(row + i0) * 2] * (1 - w) + defl[(row + Math.min(i0 + 1, DEFL_W - 1)) * 2] * w
+}
 
 /**
  * 𝔻(e,u): sonsuzdan gelen ışının u yarıçapındaki sapması Δ ve ışık uçuş süresi.
@@ -145,44 +183,93 @@ function bakeDeflection(maxRows = 1.0, hMax = 0.05): Float32Array {
 
 /**
  * 𝕌(e,φ): sonsuzdan gelen ışının φ açısındaki ters yarıçapı u ve uçuş süresi.
- * Disk kesişim noktasını sabit zamanda verir. 64×32 yeter: doğrulandı, bağıl
- * hata medyan %0.03 / max %0.24. Burada uyarlanabilir adıma gerek yok — satır
- * ekseni doğrudan φ olduğu için sabit adım zaten düzgün örnekliyor.
+ * Disk kesişim noktasını sabit zamanda verir.
+ *
+ * SÜTUN EKSENİ 𝔻'ninkiyle AYNI (deflTexU). Bu bir kolaylık değil DOĞRULUK
+ * ŞARTI: o eşleme KMU'yu dokunun İKİ UCUNA koyar, böylece bilineer aradeğer
+ * apsisli bir sütunla apsissiz bir sütunu asla karıştırmaz. Eski 1/(1+6e²)
+ * ekseninde KMU tam ortadaydı; komşu iki sütun (e² = 0.1492 ufuk / 0.1449
+ * apsis) karışıyor ve kesişim YÖNÜ 100° sapıyordu (ölçüldü, b3shader.mjs).
+ * Yan fayda: çözünürlük u(φ)'nin en hızlı değiştiği yerde, KMU çevresinde
+ * yoğunlaşır — ve shader zaten hesapladığı sütun koordinatını yeniden kullanır.
+ *
+ * SATIR EKSENİ φ ∈ [0, Φ], Φ = min(φ_end(e²), PHI_CAP). Φ, φ_end'den DEĞİL
+ * 𝔻 verisinden okunur: shader de öyle okuyacak, iki taraf bit-bit aynı ekseni
+ * kullanmalı yoksa satır eşlemesi kayar.
+ *
+ * Satır ekseni φ'de doğrusal olduğu için 𝔻'deki uyarlanabilir adım gerekmez —
+ * sabit h = maxRows·Φ/(H−1) zaten satır başına sabit örnek yoğunluğu verir;
+ * doğruluğu ODE mertebesi değil satır doldurmanın doğrusal ara değeri sınırlar.
+ * Sonuç: 128×64 tablo 26 ms'de pişiyor — eski 64×32 Euler tablosu 124 ms idi.
+ *
+ * KRİTİK AYRINTI (𝔻 ile aynı ders): uç noktayı (apsis/ufuk) AŞAN adım rafine
+ * edilmeli, yoksa son satırlar hiç doldurulmaz ve tabloda sıfır kalır.
  */
-function bakeInverseRadius(): Float32Array {
+function bakeInverseRadius(defl: Float32Array, maxRows = 0.125): Float32Array {
   const data = new Float32Array(INVR_W * INVR_H * 2)
   const set = (i: number, k: number, a: number, t: number) => {
     data[(k * INVR_W + i) * 2] = a
     data[(k * INVR_W + i) * 2 + 1] = t
   }
   for (let i = 0; i < INVR_W; i++) {
-    const e2 = invRadTexUInv(clamp(i / (INVR_W - 1), 0.001, 0.999))
+    const e2 = deflTexUInv(i / (INVR_W - 1))
     const e = Math.sqrt(e2)
-    const pub = phiUb(e2)
+    const PH = Math.min(phiEndFromDefl(e2, deflEndOf(defl, e2)), PHI_CAP)
+    const uEnd = e2 < KMU ? uApsis(e2) : 1
+    const g = (u: number) => (u > 1e-2 ? e / (u * u * (1 - u)) : 0)
+    const h0 = (maxRows * PH) / (INVR_H - 1)
+    let h = h0
     let t = 0
     let u = 0
     let ud = e
     let phi = 0
-    const dphi = 1e-5
     let pU = 0
     let pT = 0
     let pJ = 0
     set(i, 0, 0, 0)
     for (;;) {
-      const j = (phi / pub) * (INVR_H - 1)
+      const j = (phi / PH) * (INVR_H - 1)
       const k1 = Math.min(Math.ceil(j), INVR_H)
       for (let k = Math.ceil(pJ); k < k1; k++) {
         const l = (k - pJ) / (j - pJ)
         set(i, k, pU * (1 - l) + u * l, pT * (1 - l) + t * l)
       }
-      if (k1 === INVR_H) break
+      if (k1 >= INVR_H) break
       pU = u
       pT = t
       pJ = j
-      if (u > 1e-2) t += (e / (u * u * (1 - u))) * dphi
-      ud += (1.5 * u * u - u) * dphi
-      u += ud * dphi
-      phi += dphi
+      let bitti = false
+      for (;;) {
+        const a1 = ud
+        const b1 = 1.5 * u * u - u
+        const a2 = ud + (h / 2) * b1
+        const b2 = 1.5 * (u + (h / 2) * a1) * (u + (h / 2) * a1) - (u + (h / 2) * a1)
+        const a3 = ud + (h / 2) * b2
+        const b3 = 1.5 * (u + (h / 2) * a2) * (u + (h / 2) * a2) - (u + (h / 2) * a2)
+        const a4 = ud + h * b3
+        const b4 = 1.5 * (u + h * a3) * (u + h * a3) - (u + h * a3)
+        const nu = u + (h / 6) * (a1 + 2 * a2 + 2 * a3 + a4)
+        const nd = ud + (h / 6) * (b1 + 2 * b2 + 2 * b3 + b4)
+        if (nu >= uEnd || nd < 0) {
+          if (h > 1e-7) {
+            h *= 0.5
+            continue
+          }
+          bitti = true
+          break
+        }
+        t += (h / 6) * (g(u) + 4 * g(u + (h / 2) * a2) + g(u + h * a3))
+        u = nu
+        ud = nd
+        phi += h
+        h = h0
+        break
+      }
+      if (bitti) {
+        // apsise/ufka varıldı: kalan satırlar uç değeriyle doldurulur
+        for (let k = Math.ceil(pJ); k < INVR_H; k++) set(i, k, uEnd, t)
+        break
+      }
     }
   }
   return data
@@ -212,6 +299,7 @@ export interface LensTables {
   readonly inverseRadius: THREE.DataTexture
 }
 
+let cachedDeflData: Float32Array | null = null
 let cachedDefl: THREE.DataTexture | null = null
 let cachedInvR: THREE.DataTexture | null = null
 
@@ -220,16 +308,21 @@ let cachedInvR: THREE.DataTexture | null = null
  * bağlı) — süreç başına BİR KEZ pişirilir. Bulutsu küp haritasının aksine
  * renderer'a değil MODÜLE aittir: içinde GL durumu yok, saf veri.
  *
- * 𝕌 tablosu TEMBEL: bugün yalnız 𝔻 kullanılıyor (bkz. lensShader'daki
- * muhafazakâr atlama testi) ve 𝕌'yu pişirmek açılışta ~120 ms yiyor.
- * Hacimli disk analitik kesişime çapalandığında (B2) erişilir ve o an pişer.
+ * 𝕌 TEMBEL kalır: `?b2=0` ile açılan oturum ona hiç dokunmaz. Maliyeti artık
+ * küçük (26 ms), ama eksen tavanını 𝔻 VERİSİNDEN okuduğu için 𝔻'den SONRA
+ * pişmek zorunda — tembellik bu bağımlılığı da kendiliğinden garantiliyor.
  */
 export function getLensTables(): LensTables {
-  if (!cachedDefl) cachedDefl = makeTexture(bakeDeflection(), DEFL_W, DEFL_H)
+  if (!cachedDefl) {
+    cachedDeflData = bakeDeflection()
+    cachedDefl = makeTexture(cachedDeflData, DEFL_W, DEFL_H)
+  }
   return {
     deflection: cachedDefl,
     get inverseRadius(): THREE.DataTexture {
-      if (!cachedInvR) cachedInvR = makeTexture(bakeInverseRadius(), INVR_W, INVR_H)
+      if (!cachedInvR) {
+        cachedInvR = makeTexture(bakeInverseRadius(cachedDeflData!), INVR_W, INVR_H)
+      }
       return cachedInvR
     },
   }

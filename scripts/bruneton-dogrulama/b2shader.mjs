@@ -1,7 +1,10 @@
-// SHADER'IN B2 DALININ BİREBİR TRANSLİTERASYONU, gerçeğe karşı.
-// Amaç: GLSL'e yazarken işaret/değişken hatası yapıldı mı? Buradaki kod
-// lensShader.ts'teki bloğun satır satır JS karşılığıdır — biri değişirse
-// diğeri de değişmeli.
+// ⚠️ TARİHÇE — ARTIK SHADER'I YANSITMIYOR. Faz B3'ten (𝕌'nun φ ekseni bizim)
+// önceki B2 dalının transliterasyonudur ve o günkü davranışın kaydı olarak
+// duruyor. GÜNCEL GÜVENLİK AĞI: b3shader.mjs. Shader'ı değiştirirsen ONU
+// güncelle; bu betiğin geçmesi hiçbir şeyi garanti etmez.
+//
+// (özgün başlık) SHADER'IN B2 DALININ BİREBİR TRANSLİTERASYONU, gerçeğe karşı.
+// Amaç: GLSL'e yazarken işaret/değişken hatası yapıldı mı?
 import { buildDeflectionTableAdaptive, buildInverseRadiusTable,
          sample2, texCoord, KMU, IW, IH } from './bruneton.mjs';
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
