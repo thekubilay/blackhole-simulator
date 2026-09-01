@@ -511,7 +511,17 @@ void main(){
       // Doğrulandı (scripts/bruneton-dogrulama/kesisimB2.mjs + b2yakalanan.mjs):
       // kaçan ışında 2888/2916 kesişim, yarıçap medyan %0.098, konum 0.0097
       // birim, YÖN medyan 0.795 mrad; yakalanan ışında %0.036 / 0.0022 birim.
-      if(uB2 > 0.5 && uJetA.x*uRealism <= 0.0){
+      // YAKALANAN IŞIN B2'YE GİRMEZ, marşa düşer. Sebep 𝕌 tablosunun kapsamı:
+      // φ_ub = (1+e²)/(1/3 + 2e²√e²) apsisi olmayan (e² ≥ KMU) ışınlarda çok
+      // dar — e² = 1 için yalnız φ ∈ [0, 0.86]. Gölgenin ÖNÜNDEKİ disk kesişimi
+      // ise çok daha büyük φ'de düşüyor, döngü 'pub'da kırılıyor ve o disk hiç
+      // çizilmiyordu. Ekranda gölgenin üstünde disk düzlemine hizalı, kenardan
+      // görülen düz bir kesik olarak çıkıyor (kullanıcı ekran görüntüsü,
+      // 2026-09-01). Ölçüm: yakalanan ışınlarda bant kesişimlerinin %34'ü
+      // kayboluyordu (b2yakalanan.mjs). Kalıcı çözüm 𝕌'yu kendi φ aralığımızla
+      // pişirmek (tablo bizim), ama o ayrı bir iş — şimdilik marş doğru sonucu
+      // veriyor ve gölge karenin küçük bir kısmı.
+      if(uB2 > 0.5 && uJetA.x*uRealism <= 0.0 && defl >= 0.0){
         // BİRİKMİŞ sapma (sonsuzdan kameraya) — tableDefl'in döndürdüğü KALAN
         // sapmanın tersi. İçe giden ışın ham değeri, dışa giden 2Δ_apsis − ham.
         float raw, ap2;
@@ -522,12 +532,17 @@ void main(){
         float pub  = phiUbT(e2);
         bool esc   = defl >= 0.0;
         float psiMax = esc ? delta + defl : 1e9;   // yakalananda sınır ufuk
+        bool tam = true;                    // kesişim sayımı eksiksiz mi
         vec3 td2 = cross(vec3(0., 1., 0.), ez);
         float tdl2 = length(td2);
         if(tdl2 > 1e-5){
           td2 /= tdl2;
           if(dot(td2, ey) < 0.0) td2 = -td2;
           float alpha2 = acos(clamp(dot(pr, td2), -1.0, 1.0));
+          // B2 yalnız TAM ÇÖZEBİLDİĞİ pikseli sahiplenir. Kesişim sayımı
+          // tablo kapsamı yüzünden yarıda kalırsa (phiE > pub) sonuç eksik
+          // olur — o piksel marşa bırakılır. Gölge KENARINDA olduğu için
+          // görsel bedeli yüksek, sayıca ise küçük (8320 pikselde 10).
           for(int k = 0; k < 6; k++){
             float psi = alpha2 + float(k)*PI_;
             if(psi >= psiMax) break;
@@ -536,8 +551,8 @@ void main(){
             // olmadan kesişimlerin %20'si düşer — kamera disk kenarında
             // olduğu için φ_c zaten φ_ub'ye yakın başlıyor.
             float phiE = (e2 < KMU && phi > phiA) ? 2.0*phiA - phi : phi;
-            if(phiE < 0.0) break;             // ışın sonsuza kaçtı
-            if(phiE > pub) break;             // tablo kapsamı dışı (ISCO altı)
+            if(phiE < 0.0) break;             // ışın sonsuza kaçtı: sayım TAM
+            if(phiE > pub){ tam = false; break; }   // kapsam yetmedi: marşa bırak
             float uk = tableInvRad(e2, phiE);
             if(uk >= 1.0) break;              // ufka düştü
             float rr = 1.0/max(uk, 1e-6);
@@ -565,6 +580,11 @@ void main(){
             if(acc.a > 0.99) break;
           }
         }
+        if(!tam){
+          // Eksik sayım: B2'nin biriktirdiğini AT ve marşa düş. acc'ye bu
+          // noktaya kadar yalnız B2 yazdı, sıfırlamak güvenli.
+          acc = vec4(0.);
+        } else {
         float minR2 = ud > 0.0 ? (e2 < KMU ? 1.0/uApsisT(e2) : 1.0) : r0;
         vec3 bg2 = vec3(0.);
         if(esc && acc.a < 0.985){
@@ -580,6 +600,7 @@ void main(){
         }
         gl_FragColor = vec4(outColor(col2, ndc), 1.);
         return;
+        }
       }
       if(!march){
         float dp = delta + defl;

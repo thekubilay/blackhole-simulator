@@ -51,14 +51,14 @@ function b2(p,v){
   let td2=cross([0,1,0],ez); const tdl2=len(td2); if(tdl2<=1e-5) return {hits:[],esc};
   td2=mul(td2,1/tdl2); if(dot(td2,ey)<0) td2=mul(td2,-1);
   const alpha2=Math.acos(clamp(dot(pr,td2),-1,1));
-  const hits=[];
+  const hits=[]; let tam=true;
   for(let k=0;k<6;k++){
     const psi=alpha2+k*Math.PI;
     if(psi>=psiMax) break;
     const phi=phiC+psi;
     const phiE=(e2<KMU && phi>phiA) ? 2*phiA-phi : phi;
     if(phiE<0) break;
-    if(phiE>pub) break;
+    if(phiE>pub){ tam=false; break; }
     const uk=tableInvRad(e2,phiE);
     if(uk>=1) break;
     const rr=1/Math.max(uk,1e-6);
@@ -69,9 +69,9 @@ function b2(p,v){
     const sgnk=(e2<KMU) ? (phi>phiA?-1:1) : (ud>0?1:-1);
     const udk=Math.sqrt(Math.max(e2+uk*uk*uk-uk*uk,0))*sgnk;
     const vk=norm(add(et, mul(er, -udk/Math.max(uk,1e-6))));
-    hits.push({r:rr,pos:hp,dir:vk});
+    hits.push({r:rr,pos:hp,dir:vk,k,sgnk,phi,phiA,e2});
   }
-  return {hits,esc};
+  return {hits,esc,tam};
 }
 function truth(p0,v0){
   let p=[...p0],v=[...v0]; const h2=dot(cross(p,v),cross(p,v)); const dt=0.0015; const hits=[];
@@ -91,6 +91,7 @@ function truth(p0,v0){
 // SADECE sampleDisk'in gerçekten çizdiği bant önemli: [uDiskIn, R_OUT]
 const inDisk=h=>h.r>uDiskIn && h.r<R_OUT;
 let eslesen=0,eksik=0,fazla=0,escKavga=0; const rE=[],pE=[],dE=[];
+const perK={}; const kotu=[];
 for(const camPos of [[2.2,1.15,13.2],[1.5,0.8,8.5],[4,3,20],[0.5,2.0,6.5]]){
   const fwd=norm([-camPos[0],-camPos[1],-camPos[2]]);
   const right=norm(cross(fwd,[0,1,0])); const up=cross(right,fwd);
@@ -103,6 +104,7 @@ for(const camPos of [[2.2,1.15,13.2],[1.5,0.8,8.5],[4,3,20],[0.5,2.0,6.5]]){
     const r0=len(camPos), f0=Math.sqrt(Math.max(1-1/r0,1e-4)), pr=norm(camPos);
     const v=norm([rd[0]+(f0-1)*dot(rd,pr)*pr[0], rd[1]+(f0-1)*dot(rd,pr)*pr[1], rd[2]+(f0-1)*dot(rd,pr)*pr[2]]);
     const a=b2(camPos,v); if(!a) continue;
+    if(!a.esc || !a.tam) continue;   // marşa düşen piksel B2'nin sorumluluğunda değil
     const t=truth(camPos,v);
     if(a.esc === t.captured) escKavga++;
     const tb=t.hits.filter(inDisk), ab=a.hits.filter(inDisk);
@@ -114,15 +116,25 @@ for(const camPos of [[2.2,1.15,13.2],[1.5,0.8,8.5],[4,3,20],[0.5,2.0,6.5]]){
       if(en<0||enD>1.0){ eksik++; continue; }
       kul[en]=true; eslesen++;
       rE.push(Math.abs(ab[en].r-th.r)/th.r); pE.push(enD);
-      dE.push(Math.acos(clamp(dot(ab[en].dir,th.dir),-1,1)));
+      const de=Math.acos(clamp(dot(ab[en].dir,th.dir),-1,1));
+      dE.push(de);
+      const kk=ab[en].k;
+      (perK[kk]=perK[kk]||[]).push(de);
+      if(de>0.3 && kotu.length<6) kotu.push({k:kk,sgnk:ab[en].sgnk,
+        phi:+ab[en].phi.toFixed(3),phiA:+ab[en].phiA.toFixed(3),e2:+ab[en].e2.toFixed(5),
+        r:+ab[en].r.toFixed(2), hataDeg:+(de*180/Math.PI).toFixed(1)});
     }
     fazla += kul.filter(x=>!x).length;
   }
 }
-const q=(a,f)=>{const b=a.slice().sort((x,y)=>x-y);return b[Math.floor(b.length*f)];};
+const q=(a,f)=>{const b=a.slice().sort((x,y)=>x-y);return b[Math.min(b.length-1,Math.floor(b.length*f))];};
 console.log(`SHADER B2 TRANSLİTERASYONU vs GERÇEK  (4 kamera x 6272 piksel)`);
 console.log(`  disk bandı kesişimi: eşleşen ${eslesen}, EKSİK ${eksik} (%${(100*eksik/(eslesen+eksik)).toFixed(2)}), FAZLA ${fazla}`);
 console.log(`  kaçış/yakalanma kararı çelişkisi: ${escKavga}`);
 console.log(`  yarıçap bağıl: medyan ${(q(rE,.5)*100).toFixed(3)}%  p99 ${(q(rE,.99)*100).toFixed(2)}%`);
 console.log(`  konum        : medyan ${q(pE,.5).toFixed(4)}  p99 ${q(pE,.99).toFixed(3)} birim`);
-console.log(`  YÖN          : medyan ${(q(dE,.5)*1e3).toFixed(2)} mrad  p99 ${(q(dE,.99)*1e3).toFixed(1)} mrad`);
+console.log(`  YÖN          : medyan ${(q(dE,.5)*1e3).toFixed(2)} mrad  p99 ${(q(dE,.99)*1e3).toFixed(1)} mrad  MAX ${(q(dE,1)*180/Math.PI).toFixed(1)} derece`);
+console.log('  k bazında yön hatası:');
+for(const kk of Object.keys(perK).sort()){ const a=perK[kk];
+  console.log(`    k=${kk}: ${a.length} kesişim, medyan ${(q(a,.5)*1e3).toFixed(2)} mrad, p99 ${(q(a,.99)*1e3).toFixed(1)} mrad, MAX ${(q(a,1)*180/Math.PI).toFixed(1)} derece`); }
+if(kotu.length) console.log('  17 dereceden kötü örnekler:', JSON.stringify(kotu));
