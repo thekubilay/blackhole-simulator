@@ -54,7 +54,7 @@ export function LensedBackground({
   // Bu artık cihaz yeteneğine bağlı SABİT bir seçim değil: kalite kademesi
   // parlamayı kapatınca hat bütünüyle devre dışı kalır (ölçüm: 2.89 Mpix'te
   // 2.0 ms — bkz. bloom.ts render()). Kararın sahibi hattır, biz her karede
-  // `active`'i okur ve materyali ona uydururuz. SIRALAMA TUZAĞI YOK: hat
+  // usesTarget'ı okur ve materyali ona uydururuz. SIRALAMA TUZAĞI YOK: hat
   // kademe değişimini o an uygulamaz, çizdiği karenin SONUNDA işler
   // (bkz. setEnabled/commit) — yani bu useFrame ile hattın render'ı bir kare
   // içinde daima aynı değeri görür. Uygulanmasaydı geçiş karesinde mesh yanlış
@@ -63,7 +63,7 @@ export function LensedBackground({
   const initialUniforms = useMemo(() => {
     const uniforms = createLensUniforms()
     uniforms.uNebTex.value = getNebulaCube(gl)
-    uniforms.uToneMap.value = pipeline?.active ? 0 : 1
+    uniforms.uToneMap.value = pipeline?.usesTarget ? 0 : 1
     // Tablolar sahneden bağımsız: süreç başına bir kez pişer (~175 ms, açılış
     // dolly'si sırasında). Bulutsu küpünün aksine renderer'a değil modüle ait.
     const lt = getLensTables()
@@ -79,7 +79,7 @@ export function LensedBackground({
   useFrame(({ camera }) => {
     const uniforms = material.current?.uniforms as LensUniforms | undefined
     if (!uniforms) return
-    const hdrPath = pipeline?.active ?? false
+    const hdrPath = pipeline?.usesTarget ?? false
     uniforms.uToneMap.value = hdrPath ? 0 : 1
     mesh.current?.layers.set(hdrPath ? LENS_LAYER : 0)
     camera.updateMatrixWorld()

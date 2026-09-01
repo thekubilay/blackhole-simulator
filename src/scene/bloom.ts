@@ -180,6 +180,19 @@ export class BloomPipeline {
   private enabled = true
   /** kalite kademesinin istediği yol; kare SONUNDA işlenir (bkz. render) */
   private wanted = true
+  /**
+   * KATMANLI RENDER: lens katmanının çizildiği hedefin çözünürlük ölçeği.
+   * 1 = tam çözünürlük. 0.6 = pikselin %36'sı — lens maliyeti ölçüldüğü gibi
+   * piksele DOĞRUSAL (2.1 ms/Mpix) olduğundan doğrudan oradan kısar. Gemi,
+   * parçacıklar ve HUD bu hedeften GEÇMEZ: onlar kompozitten sonra tam
+   * çözünürlükte çizilir, yani keskin kalır. setDpr'ın aksine bu, keskinliği
+   * yalnız düşük frekanslı fondan alır.
+   *
+   * Yalnız KURULUMDA ayarlanır (?fon= pini). Çalışma anında değiştirmek
+   * lens'in uToneMap/katman durumuyla senkron gitmeli — enabled'daki commit
+   * dansının aynısı gerekir; bugün gerekmediği için o karmaşa eklenmedi.
+   */
+  private lensScale = 1
 
   private readonly prefilter: THREE.ShaderMaterial
   private readonly down: THREE.ShaderMaterial
@@ -252,9 +265,27 @@ export class BloomPipeline {
     this.wanted = on
   }
 
-  /** BU KARENİN yolu: parlama ve HDR hattı devrede mi (LensedBackground okur). */
+  /** BU KARENİN yolu: parlama devrede mi. */
   get active(): boolean {
     return this.enabled
+  }
+
+  /**
+   * Lens AYRI BİR HEDEFE mi çiziliyor? Parlama açıkken de, katmanlı render
+   * açıkken de öyle. LensedBackground bunu okur: hedefe çizen lens DOĞRUSAL
+   * HDR yazmalı (uToneMap = 0) ve LENS_LAYER'da olmalı — ton eşlemesini
+   * birleştirme geçişi yapar.
+   */
+  get usesTarget(): boolean {
+    return this.enabled || this.lensScale < 0.999
+  }
+
+  /** Kurulumda çağrılır (?fon=). Bkz. lensScale açıklaması. */
+  setLensScale(scale: number): void {
+    const next = Math.min(Math.max(scale, 0.3), 1)
+    if (next === this.lensScale) return
+    this.lensScale = next
+    this.width = 0
   }
 
   /** Kare sonu: istenen yol ile çizilen yolu eşitle. */
@@ -266,7 +297,9 @@ export class BloomPipeline {
     // Kapalıyken HDR hedefi de tutulmaz: retina'da 2419x1195 yarım-float RGBA
     // ~23 MB. 1x1'e indirmek dokuyu canlı bırakır, resize() açılışta gerçek
     // boyuta geri kurar.
-    if (!this.enabled) this.hdr.setSize(1, 1)
+    // Hedefi ancak HİÇBİR yol kullanmıyorsa serbest bırak: katmanlı render
+    // açıkken parlama kapalı olsa da lens o hedefe çiziliyor.
+    if (!this.usesTarget) this.hdr.setSize(1, 1)
     this.width = 0
   }
 
@@ -292,14 +325,21 @@ export class BloomPipeline {
     if (w === this.width && h === this.height) return
     this.width = w
     this.height = h
-    this.hdr.setSize(w, h)
+    // Lens hedefi ÖLÇEKLİ; birleştirme geçişi onu tam çözünürlüğe büyütür
+    // (hedef LinearFilter, yani bilinear). Mip zinciri de ölçekliden türer.
+    const lw = Math.max(Math.floor(w * this.lensScale), 1)
+    const lh = Math.max(Math.floor(h * this.lensScale), 1)
+    this.hdr.setSize(lw, lh)
     for (const m of this.mips) m.dispose()
     this.mips = []
     // Tuval çok küçükse (yerleşim/yön geçişinde daralma, düşük dpr) zincir BOŞ
     // kalabilir — render() bunu ayrıca ele alır, burada zorlama yapılmaz.
+    // Mip zinciri YALNIZ parlama için: katmanlı render tek başına onu istemez
+    // ve boşuna VRAM tutar.
+    if (!this.enabled) return
     const levels = Math.max(1, Math.floor(this.params.levels))
-    let mw = Math.max(Math.floor(w / 2), 1)
-    let mh = Math.max(Math.floor(h / 2), 1)
+    let mw = Math.max(Math.floor(lw / 2), 1)
+    let mh = Math.max(Math.floor(lh / 2), 1)
     for (let i = 0; i < levels && mw > 8 && mh > 8; i++) {
       this.mips.push(makeTarget(mw, mh))
       mw = Math.max(Math.floor(mw / 2), 1)
@@ -331,7 +371,7 @@ export class BloomPipeline {
     // atla" değil, "hattan tümüyle çık" demek: lens kendi ton eşlemesini yapar
     // (uToneMap = 1) ve 0. katmanda kalır — ikisini de LensedBackground her
     // karede `active`'e bakarak yazar, yani burada ekstra bir sözleşme yok.
-    if (!this.enabled) {
+    if (!this.usesTarget) {
       const prevAutoClear = renderer.autoClear
       camera.layers.set(0)
       renderer.setRenderTarget(null)
@@ -356,7 +396,7 @@ export class BloomPipeline {
     // parlama üretilmez ama kare YİNE ÇİZİLİR — zincirsiz kalan bir karede
     // this.mips[0] okumak useFrame içinde istisna atar ve R3F döngüsünü
     // kalıcı olarak öldürürdü (tek karelik bozulma değil, siyah tuval).
-    const hasBloom = this.mips.length > 0
+    const hasBloom = this.enabled && this.mips.length > 0
 
     if (hasBloom) {
       // 2) Eşik → en büyük mip

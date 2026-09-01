@@ -27,7 +27,7 @@ import { useGameSnapshot } from './hooks/useGameSnapshot'
 export default function App() {
   const coarsePointer = useMedia('(pointer: coarse)')
   // deps boş: simülasyon bir kez kurulur, kuruluştaki işaretçi türü kullanılır
-  const { controller, governor, game, bloomPin, tables, b2 } = useMemo(() => {
+  const { controller, governor, game, bloomPin, tables, b2, lensScale } = useMemo(() => {
     // ?kalite=yuksek|orta|dusuk|mobil → governor sabitlenir (test/ölçüm aracı)
     const ASCII: Record<string, string> = { yuksek: 'yüksek', dusuk: 'düşük' }
     const params = new URLSearchParams(window.location.search)
@@ -51,7 +51,11 @@ export default function App() {
     // ?b2=0 → disk kesişimleri tablodan ÇIKARILIR, hepsi marşa döner (A/B ölçümü).
     // Varsayılan AÇIK: ölçüldü, 'yüksek'te 23.60 → 9.26 ms (2.55x).
     const b2 = params.get('b2') !== '0'
-    return { controller, governor, game, bloomPin, tables, b2 }
+    // ?fon=0.6 → KATMANLI RENDER: lens fonu ayrı hedefte 0.6x çözünürlükte
+    // çizilir, gemi/HUD tam çözünürlükte üstüne kompozitlenir. 1 = kapalı.
+    const fon = Number(params.get('fon'))
+    const lensScale = Number.isFinite(fon) && fon > 0 ? Math.min(Math.max(fon, 0.3), 1) : 1
+    return { controller, governor, game, bloomPin, tables, b2, lensScale }
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır
   const gameActive = useGameSnapshot(game).active
@@ -84,7 +88,7 @@ export default function App() {
         <SimulationLayer controller={controller} />
         <SpawnPlane onSpawn={controller.spawnAt} />
         {/* En sonda: öncelikli useFrame ile kareyi devralır (bkz. PostFx) */}
-        <PostFx governor={governor} pin={bloomPin} />
+        <PostFx governor={governor} pin={bloomPin} lensScale={lensScale} />
       </Canvas>
       <Overlay controller={controller} game={game} />
       <RotateGate />

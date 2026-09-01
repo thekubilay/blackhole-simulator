@@ -17,8 +17,22 @@ import { getBloomPipeline, supportsHdrPost } from './bloom'
  * — kapalı olan yalnız zincir; HDR hedefi, birleştirme ve ton eşleme aynı kalır,
  * yani kademe değişiminde çizim yolu değişmez, tek fark parlama katkısıdır.
  */
-function BloomDriver({ governor, pin }: { governor: QualityGovernor; pin: boolean | null }) {
+function BloomDriver({
+  governor,
+  pin,
+  lensScale,
+}: {
+  governor: QualityGovernor
+  pin: boolean | null
+  lensScale: number
+}) {
   const pipeline = useThree((s) => getBloomPipeline(s.gl))
+  // Katmanlı render ölçeği KURULUMDA verilir (bkz. BloomPipeline.lensScale):
+  // lens'in uToneMap/katman durumuyla senkron gitmesi gerektiği için çalışma
+  // anında değiştirilmez.
+  useEffect(() => {
+    pipeline.setLensScale(lensScale)
+  }, [pipeline, lensScale])
   useEffect(() => {
     if (pin !== null) {
       // ?bloom=0|1 → ölçüm/karşılaştırma pini: kademe kararını ezer
@@ -38,7 +52,16 @@ function BloomDriver({ governor, pin }: { governor: QualityGovernor; pin: boolea
  * kendi yapar (`uToneMap = 1`). Yani eski davranış birebir korunur.
  * Koşul renderer'ın ömrü boyunca sabittir; kanca sırası değişmez.
  */
-export function PostFx({ governor, pin }: { governor: QualityGovernor; pin: boolean | null }) {
+export function PostFx({
+  governor,
+  pin,
+  lensScale,
+}: {
+  governor: QualityGovernor
+  pin: boolean | null
+  /** lens fonunun çözünürlük ölçeği (?fon=); 1 = tam çözünürlük */
+  lensScale: number
+}) {
   const enabled = useThree((s) => supportsHdrPost(s.gl))
-  return enabled ? <BloomDriver governor={governor} pin={pin} /> : null
+  return enabled ? <BloomDriver governor={governor} pin={pin} lensScale={lensScale} /> : null
 }
