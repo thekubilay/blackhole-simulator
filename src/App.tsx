@@ -49,7 +49,9 @@ export default function App() {
     // ?tablo=0 → Bruneton tabloları kapalı, eski marş (A/B ölçümü)
     const tables = params.get('tablo') !== '0'
     // ?b2=0 → disk kesişimleri tablodan ÇIKARILIR, hepsi marşa döner (A/B ölçümü).
-    // Varsayılan AÇIK: ölçüldü, 'yüksek'te 23.60 → 9.26 ms (2.55x).
+    // Varsayılan AÇIK. Faz B3'ten beri YAKALANAN ışın da tabloda (gölge önündeki
+    // disk): marşa düşen piksel %0, marş yalnız jet için kaldı. Ölçüm 'yüksek',
+    // 2.89 Mpix: B2 11.55 ms → B3 8.55 ms; aynı karede tam marş 30.85 ms.
     const b2 = params.get('b2') !== '0'
     // ?fon=0.6 → katmanlı render ölçeği PİNLENİR (A/B ölçümü). Pin yoksa
     // ölçeği kalite kademesi belirler (QualityGovernor.levels).

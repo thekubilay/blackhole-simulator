@@ -233,3 +233,93 @@ export function buildDeflectionTableAdaptive(maxRows = 0.5, hMax = 0.05) {
   }
   return { data, steps };
 }
+
+// ═══ FAZ B3: 𝕌 tablosunun φ EKSENİ BİZİM ═══════════════════════════════
+// Bruneton'un phi_ub'si apsisi olmayan (e² ≥ KMU, yani YAKALANAN) ışınlarda
+// ufka varmadan kesiliyor — ölçüldü (phiaralik.mjs): gölge önündeki disk
+// kesişimlerinin %34'ü kapsam dışında kalıyor, o pikseller marşa düşüyor.
+//
+// Doğru eksen tavanı φ_end: ışının sonsuzdan APSİSE (e²<KMU) ya da UFKA
+// (e²≥KMU) varana dek süpürdüğü açı. YENİ TABLOYA GEREK YOK — 𝔻'nin son
+// satırındaki Δ_son'dan analitik çıkar, çünkü Δ = φ − atan2(u, u̇):
+//   • apsis: u̇ = 0        → φ_a = Δ_son + π/2
+//   • ufuk : u = 1, u̇ = e → φ_h = Δ_son + atan2(1, e)
+// (u̇² = e² + u³ − u², u=1'de u̇² = e².)
+export function phiEndFromDefl(e2, deflEnd) {
+  return deflEnd + (e2 < KMU ? Math.PI / 2 : Math.atan2(1, Math.sqrt(e2)));
+}
+/** 𝔻'nin son satırı — shader'daki tableRaw'ın 'apsis' çıkışıyla birebir */
+export function deflEndOf(D, e2) {
+  return sample2(D, DW, DH, texCoord(deflTexU(e2), DW), texCoord(1, DH))[0];
+}
+
+/**
+ * 𝕌'yu φ ∈ [0, Φ] üstünde pişirir; Φ = min(φ_end(e²), cap).
+ *
+ * Φ, 𝔻 DOKUSUNDAN okunur (analitik φ_end'den değil): shader de öyle okuyacak,
+ * iki taraf birebir aynı ekseni kullanmalı yoksa satır eşlemesi kayar.
+ *
+ * Satır ekseni φ'de DOĞRUSAL olduğu için 𝔻'deki uyarlanabilir adım gerekmez —
+ * sabit h = maxRows·Φ/(H−1) zaten satır başına sabit yoğunluk verir. Doğruluğu
+ * ODE mertebesi değil satır doldurmanın doğrusal ara değeri sınırlar (𝔻 dersi).
+ *
+ * cap: φ_end e² → KMU'da IRAKSAR (ışın foton küresinde dolanır). Kapaklanan
+ * sütunlarda tablo ufka/apsise ULAŞMAZ; shader bunu bilmeli ve o pikselleri
+ * marşa bırakmalı (capped bayrağı).
+ */
+export function buildInverseRadiusTableB3(D, opts = {}) {
+  const { W = IW, H = IH, cap = 8, maxRows = 0.125 } = opts;
+  const data = new Float32Array(W * H * 2);
+  const set = (i, k, a, t) => { data[(k * W + i) * 2] = a; data[(k * W + i) * 2 + 1] = t; };
+  const f = (u, ud) => [ud, 1.5 * u * u - u];
+  for (let i = 0; i < W; i++) {
+    // SÜTUN EKSENİ 𝔻'ninkiyle AYNI (deflTexU): KMU'yu dokunun İKİ UCUNA
+    // koyar, böylece bilineer aradeğerleme apsisli bir sütunla apsissiz bir
+    // sütunu ASLA karıştırmaz. Eski 1/(1+6e²) ekseninde KMU tam ortadaydı ve
+    // komşu iki sütun (e²=0.1492 ufuk / e²=0.1449 apsis) karışıyordu: yön
+    // hatası 100°'ye çıkıyordu (ölçüldü, b3shader.mjs). Yan fayda: çözünürlük
+    // KMU çevresinde yoğunlaşır — u(φ)'nin en hızlı değiştiği yer orası.
+    const e2 = deflTexUInv(i / (W - 1));
+    const e = Math.sqrt(e2);
+    const PH = Math.min(phiEndFromDefl(e2, deflEndOf(D, e2)), cap);
+    const uEnd = e2 < KMU ? uApsis(e2) : 1;
+    const g = (u) => (u > 1e-2 ? e / (u * u * (1 - u)) : 0);
+    const h0 = (maxRows * PH) / (H - 1);
+    let u = 0, ud = e, phi = 0, t = 0, h = h0;
+    let pU = 0, pT = 0, pJ = 0;
+    set(i, 0, 0, 0);
+    for (;;) {
+      const j = (phi / PH) * (H - 1);
+      const k1 = Math.min(Math.ceil(j), H);
+      for (let k = Math.ceil(pJ); k < k1; k++) {
+        const l = (k - pJ) / (j - pJ);
+        set(i, k, pU * (1 - l) + u * l, pT * (1 - l) + t * l);
+      }
+      if (k1 >= H) break;
+      pU = u; pT = t; pJ = j;
+      // uç noktayı AŞAN adım rafine edilir (𝔻'deki aynı kritik ayrıntı):
+      // aşılırsa son satırlar hiç doldurulmaz ve tabloda sıfır kalır.
+      let bitti = false;
+      for (;;) {
+        const [a1, b1] = f(u, ud);
+        const [a2, b2] = f(u + h / 2 * a1, ud + h / 2 * b1);
+        const [a3, b3] = f(u + h / 2 * a2, ud + h / 2 * b2);
+        const [a4, b4] = f(u + h * a3, ud + h * b3);
+        const nu = u + h / 6 * (a1 + 2 * a2 + 2 * a3 + a4);
+        const nd = ud + h / 6 * (b1 + 2 * b2 + 2 * b3 + b4);
+        if (nu >= uEnd || nd < 0) {
+          if (h > 1e-7) { h *= 0.5; continue; }
+          bitti = true; break;
+        }
+        t += h / 6 * (g(u) + 4 * g(u + h / 2 * a2) + g(u + h * a3));
+        u = nu; ud = nd; phi += h; h = h0;
+        break;
+      }
+      if (bitti) {                       // apsise/ufka varıldı: kalanı uçla doldur
+        for (let k = Math.ceil(pJ); k < H; k++) set(i, k, uEnd, t);
+        break;
+      }
+    }
+  }
+  return data;
+}
