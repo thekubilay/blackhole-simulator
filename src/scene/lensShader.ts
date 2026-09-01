@@ -352,7 +352,7 @@ vec3 outColor(vec3 col, vec2 ndc){ return uToneMap > 0.5 ? finish(col, ndc) : co
 // Referans uygulama BSD-3-Clause, Copyright (c) 2020 Eric Bruneton.
 uniform sampler2D uDeflTex, uInvRTex;
 uniform float uTables;             // 0 = yalnız eski marş (?tablo=0 ile A/B)
-uniform float uB2;                 // 1 = disk de tablodan (?b2=1); 0 = disk marşta
+uniform float uB2;                 // 1 = disk de tablodan (varsayılan); ?b2=0 kapatır
 #define KMU 0.148148148148         // 4/27 — kritik e²; b_krit = 3√3/2
 #define PI_ 3.14159265358979
 
@@ -831,7 +831,7 @@ export function createLensUniforms(): LensUniforms {
     uSteps: { value: 150 },
     uDeflTex: { value: null },
     uTables: { value: 1 },
-    uB2: { value: 0 },
+    uB2: { value: 1 },
     uInvRTex: { value: null },
     uDiskIn: { value: 2.35 },
     uEff: { value: 0.06 },

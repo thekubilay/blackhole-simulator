@@ -37,7 +37,7 @@ export function LensedBackground({
   governor: QualityGovernor
   /** false = tablo yolu kapalı, her ışın eski marşa girer (?tablo=0 — A/B ölçümü) */
   tables: boolean
-  /** true = disk kesişimleri de tablodan, marş yalnız jet için (?b2=1) */
+  /** true = disk kesişimleri de tablodan, marş yalnız jet için (?b2=0 kapatır) */
   b2: boolean
 }) {
   const material = useRef<THREE.ShaderMaterial>(null)
@@ -68,8 +68,8 @@ export function LensedBackground({
     // dolly'si sırasında). Bulutsu küpünün aksine renderer'a değil modüle ait.
     const lt = getLensTables()
     uniforms.uDeflTex.value = lt.deflection
-    // 𝕌 tablosu YALNIZ B2 açıkken pişirilir (tembel getter): kapalıyken
-    // kimse örneklemiyor ve pişirmesi açılışta ~120 ms yiyor.
+    // 𝕌 tablosu YALNIZ B2 açıkken pişirilir (tembel getter): ?b2=0 ile
+    // kapatıldığında kimse örneklemiyor ve pişirmesi açılışta ~120 ms yiyor.
     if (b2) uniforms.uInvRTex.value = lt.inverseRadius
     return uniforms
   }, [gl, pipeline, b2])

@@ -48,8 +48,9 @@ export default function App() {
     const bloomPin = b === null ? null : b !== '0'
     // ?tablo=0 → Bruneton tabloları kapalı, eski marş (A/B ölçümü)
     const tables = params.get('tablo') !== '0'
-    // ?b2=1 → disk kesişimleri de tablodan (deneysel; varsayılan KAPALI)
-    const b2 = params.get('b2') === '1'
+    // ?b2=0 → disk kesişimleri tablodan ÇIKARILIR, hepsi marşa döner (A/B ölçümü).
+    // Varsayılan AÇIK: ölçüldü, 'yüksek'te 23.60 → 9.26 ms (2.55x).
+    const b2 = params.get('b2') !== '0'
     return { controller, governor, game, bloomPin, tables, b2 }
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır
