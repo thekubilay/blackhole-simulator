@@ -31,11 +31,14 @@ export function LensedBackground({
   controller,
   governor,
   tables,
+  b2,
 }: {
   controller: LabController
   governor: QualityGovernor
   /** false = tablo yolu kapalı, her ışın eski marşa girer (?tablo=0 — A/B ölçümü) */
   tables: boolean
+  /** true = disk kesişimleri de tablodan, marş yalnız jet için (?b2=1) */
+  b2: boolean
 }) {
   const material = useRef<THREE.ShaderMaterial>(null)
   const mesh = useRef<THREE.Mesh>(null)
@@ -65,8 +68,11 @@ export function LensedBackground({
     // dolly'si sırasında). Bulutsu küpünün aksine renderer'a değil modüle ait.
     const lt = getLensTables()
     uniforms.uDeflTex.value = lt.deflection
+    // 𝕌 tablosu YALNIZ B2 açıkken pişirilir (tembel getter): kapalıyken
+    // kimse örneklemiyor ve pişirmesi açılışta ~120 ms yiyor.
+    if (b2) uniforms.uInvRTex.value = lt.inverseRadius
     return uniforms
-  }, [gl, pipeline])
+  }, [gl, pipeline, b2])
   // son uygulanan görsel imza: preset.visual sabit nesnedir, referans
   // karşılaştırması delik değişimini bedelsiz yakalar
   const appliedVisual = useRef<HoleVisual | null>(null)
@@ -91,6 +97,7 @@ export function LensedBackground({
     uniforms.uEsc.value = Math.max(44, jetLen, camera.position.length() + 8)
     uniforms.uSteps.value = governor.current.steps
     uniforms.uTables.value = tables ? 1 : 0
+    uniforms.uB2.value = b2 ? 1 : 0
     // deliğe özgü GERÇEK türetimler: disk iç kenarı = ISCO, verim η = 1 − E_ISCO
     uniforms.uDiskIn.value = controller.visual.diskIn
     uniforms.uEff.value = controller.visual.efficiency

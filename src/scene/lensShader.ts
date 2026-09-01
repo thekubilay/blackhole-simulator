@@ -350,8 +350,9 @@ vec3 outColor(vec3 col, vec2 ndc){ return uToneMap > 0.5 ? finish(col, ndc) : co
 // Tablolar lensTables.ts'te pişirilir — doğrulama sayıları ve pişirme
 // yöntemi oradaki yorumlarda. Burada yalnız arama + düzlem geometrisi var.
 // Referans uygulama BSD-3-Clause, Copyright (c) 2020 Eric Bruneton.
-uniform sampler2D uDeflTex;
+uniform sampler2D uDeflTex, uInvRTex;
 uniform float uTables;             // 0 = yalnız eski marş (?tablo=0 ile A/B)
+uniform float uB2;                 // 1 = disk de tablodan (?b2=1); 0 = disk marşta
 #define KMU 0.148148148148         // 4/27 — kritik e²; b_krit = 3√3/2
 #define PI_ 3.14159265358979
 
@@ -387,12 +388,30 @@ vec2 fetch2(sampler2D t, vec2 sz, vec2 tc){
   return mix(s0, s1, w.y);
 }
 
+/**
+ * Ham tablo okuması. raw = sonsuzdan u'ya BİRİKMİŞ sapma (içe giden bacak),
+ * apsis = son satır: e² < KMU ise apsisteki sapma, değilse UFUKTAKİ sapma.
+ * Yakalama kararını ve hangi bacakta olduğumuzu çağıran yorumlar.
+ */
+void tableRaw(float u, float e2, out float raw, out float apsis){
+  float tx = texco(deflTexU(e2), 512.0);
+  apsis = fetch2(uDeflTex, vec2(512.0), vec2(tx, texco(1.0, 512.0))).x;
+  raw = fetch2(uDeflTex, vec2(512.0), vec2(tx, texco(deflTexV(e2, u), 512.0))).x;
+}
+float phiUbT(float e2){ return (1.0 + e2)/(1.0/3.0 + 2.0*e2*sqrt(e2)); }
+/** Işının φ açısındaki ters yarıçapı — disk düzlemi kesişimini sabit zamanda verir */
+float tableInvRad(float e2, float phi){
+  return fetch2(uInvRTex, vec2(64.0, 32.0),
+                vec2(texco(1.0/(1.0 + 6.0*e2), 64.0),
+                     texco(clamp(phi/phiUbT(e2), 0.0, 1.0), 32.0))).x;
+}
+
 /** TraceRay'in sapma kısmı. Dönüş < 0 ise ışın ufka düşer. */
 float tableDefl(float u, float ud, float e2, out float apsisDefl){
-  float tx = texco(deflTexU(e2), 512.0);
-  apsisDefl = fetch2(uDeflTex, vec2(512.0), vec2(tx, texco(1.0, 512.0))).x;
+  float raw;
+  tableRaw(u, e2, raw, apsisDefl);
   if(e2 < KMU && u > 2.0/3.0) return -1.0;
-  float d = fetch2(uDeflTex, vec2(512.0), vec2(tx, texco(deflTexV(e2, u), 512.0))).x;
+  float d = raw;
   // DÖNÜŞ DEĞERİ "KALAN" SAPMADIR (kameradan sonsuza) — kaçış yönü δ' = δ + Δ_kalan
   // tam bunu ister. Tablo, Δ'yı İÇE GİDEN dal boyunca biriktirir (u = 0'dan u'ya;
   // bkz. lensTables.ts pişirme döngüsü, u̇ = +e'den başlar). Uzlaşım: ud = −u/tanδ,
@@ -482,6 +501,85 @@ void main(){
           // FARKLI karar veren ışın sayısı 0, yanlış atlanan 0.
           if(alpha < delta + defl) march = true;
         }
+      }
+      // ── FAZ B2: disk de tablodan ─────────────────────────────────────
+      // Marş yalnız jet için kalır. Işının disk düzlemini kestiği her nokta
+      // analitik: ψ_k = α + kπ (ψ_k < ψ_max olanlar), φ = φ_c + ψ_k,
+      // r = 1/𝕌(e², φ). Hacimli örnekleme bu noktaya çapalanır — marşın
+      // yaptığının aynısı, ama adım adım yürümeden.
+      //
+      // Doğrulandı (scripts/bruneton-dogrulama/kesisimB2.mjs + b2yakalanan.mjs):
+      // kaçan ışında 2888/2916 kesişim, yarıçap medyan %0.098, konum 0.0097
+      // birim, YÖN medyan 0.795 mrad; yakalanan ışında %0.036 / 0.0022 birim.
+      if(uB2 > 0.5 && uJetA.x*uRealism <= 0.0){
+        // BİRİKMİŞ sapma (sonsuzdan kameraya) — tableDefl'in döndürdüğü KALAN
+        // sapmanın tersi. İçe giden ışın ham değeri, dışa giden 2Δ_apsis − ham.
+        float raw, ap2;
+        tableRaw(u, e2, raw, ap2);
+        float dAcc = ud > 0.0 ? raw : 2.0*ap2 - raw;
+        float phiC = dAcc + PI_ - delta;
+        float phiA = ap2 + PI_*0.5;          // apsisin tablo açısı (e² < KMU ise)
+        float pub  = phiUbT(e2);
+        bool esc   = defl >= 0.0;
+        float psiMax = esc ? delta + defl : 1e9;   // yakalananda sınır ufuk
+        vec3 td2 = cross(vec3(0., 1., 0.), ez);
+        float tdl2 = length(td2);
+        if(tdl2 > 1e-5){
+          td2 /= tdl2;
+          if(dot(td2, ey) < 0.0) td2 = -td2;
+          float alpha2 = acos(clamp(dot(pr, td2), -1.0, 1.0));
+          for(int k = 0; k < 6; k++){
+            float psi = alpha2 + float(k)*PI_;
+            if(psi >= psiMax) break;
+            float phi = phiC + psi;
+            // APSİS SİMETRİSİ: u(φ) apsis etrafında simetriktir. Yansıtma
+            // olmadan kesişimlerin %20'si düşer — kamera disk kenarında
+            // olduğu için φ_c zaten φ_ub'ye yakın başlıyor.
+            float phiE = (e2 < KMU && phi > phiA) ? 2.0*phiA - phi : phi;
+            if(phiE < 0.0) break;             // ışın sonsuza kaçtı
+            if(phiE > pub) break;             // tablo kapsamı dışı (ISCO altı)
+            float uk = tableInvRad(e2, phiE);
+            if(uk >= 1.0) break;              // ufka düştü
+            float rr = 1.0/max(uk, 1e-6);
+            if(rr > R_OUT + 0.5) continue;    // bandın dışında, katkı yok
+            vec3 er = cos(psi)*pr + sin(psi)*ey;
+            vec3 et = -sin(psi)*pr + cos(psi)*ey;
+            vec3 hp = er*rr;
+            hp.y = 0.0;                        // kesişim tanım gereği düzlemde
+            // Yön TABLODAN DEĞİL enerji bağıntısından: u̇² = e² + u³ − u².
+            // İŞARET: apsisi olan ışında (e² < KMU) apsisin hangi tarafında
+            // olduğumuz belirler. APSİSİ OLMAYAN ışında (e² ≥ KMU) dönüm
+            // noktası yoktur — işaret ışın boyunca SABİTTİR ve kameranınkidir:
+            // içe giden plonjeyi sürdürür, dışa giden hep dışa gider.
+            float sgnk = (e2 < KMU) ? (phi > phiA ? -1.0 : 1.0)
+                                    : (ud > 0.0 ? 1.0 : -1.0);
+            float udk = sqrt(max(e2 + uk*uk*uk - uk*uk, 0.0)) * sgnk;
+            vec3 vk = normalize(et - (udk/max(uk, 1e-6))*er);
+            float Hh = diskH(rr);
+            if(rr > uDiskIn && rr < R_OUT) sampleDisk(hp, vk, Hh, 2.0*Hh, acc);
+            if(rr > uDiskIn - 1.5 && acc.a < 0.95){
+              float su = 0.85*Hh/clamp(abs(vk.y), 0.35, 1.0);
+              for(int m = 0; m < 4; m++)
+                sampleAtmo(hp + vk*((float(m) - 1.5)*su), vk, Hh, su, acc);
+            }
+            if(acc.a > 0.99) break;
+          }
+        }
+        float minR2 = ud > 0.0 ? (e2 < KMU ? 1.0/uApsisT(e2) : 1.0) : r0;
+        vec3 bg2 = vec3(0.);
+        if(esc && acc.a < 0.985){
+          float dp2 = delta + defl;
+          bg2 = stars(cos(dp2)*pr + sin(dp2)*ey)*mix(1.0, 0.12, uRealism);
+        }
+        vec3 col2 = acc.rgb + (1.0 - acc.a)*bg2;
+        if(esc){
+          col2 += mix(vec3(1.,.5,.24), vec3(.75,.85,1.15), uRealism)
+                * mix(0.05, 0.03, uRealism) * exp(-pow((minR2-2.75)*1.15,2.));
+          col2 += mix(vec3(1.05,.92,.75), vec3(.9,.95,1.2), uRealism)
+                * mix(0.5, 0.10, uRealism) * exp(-pow((minR2-1.55)*mix(5.5, 9.0, uRealism),2.));
+        }
+        gl_FragColor = vec4(outColor(col2, ndc), 1.);
+        return;
       }
       if(!march){
         float dp = delta + defl;
@@ -681,6 +779,8 @@ export type LensUniforms = {
   uSteps: THREE.IUniform<number>
   uDeflTex: THREE.IUniform<THREE.Texture | null>
   uTables: THREE.IUniform<number>
+  uB2: THREE.IUniform<number>
+  uInvRTex: THREE.IUniform<THREE.Texture | null>
   uDiskIn: THREE.IUniform<number>
   uEff: THREE.IUniform<number>
   uRealism: THREE.IUniform<number>
@@ -710,6 +810,8 @@ export function createLensUniforms(): LensUniforms {
     uSteps: { value: 150 },
     uDeflTex: { value: null },
     uTables: { value: 1 },
+    uB2: { value: 0 },
+    uInvRTex: { value: null },
     uDiskIn: { value: 2.35 },
     uEff: { value: 0.06 },
     uRealism: { value: 0 },

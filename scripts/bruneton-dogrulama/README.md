@@ -24,6 +24,7 @@ uygulama github.com/ebruneton/black_hole_shader (BSD-3-Clause).
 | `kesisimB2.mjs` | KAÇAN ışınlar: disk düzlemi kesişimlerinin konumu ve ışının oradaki yönü tablodan analitik çıkıyor. 2888/2916 kesişim eşleşti; yarıçap medyan %0.098 (p99 %0.31), konum medyan 0.0097 birim, YÖN medyan 0.795 mrad (p99 20.6) |
 | `b2yakalanan.mjs` | YAKALANAN ışınlar (gölge önündeki iç disk): apsis YOK, `phi_c = Δ_ham + π − δ` (2Δ_apsis düzeltmesi yok, yansıtma yok). Eşleşenlerde yarıçap %0.036, konum 0.0022 birim |
 | `b2teshis.mjs` | eksik kesişimlerin sebep ayrıştırması |
+| `b2shader.mjs` | **lensShader.ts'teki B2 dalının BİREBİR transliterasyonu**, gerçeğe karşı: 4 kamera × 6272 piksel, disk bandında 15532 eşleşme / 74 eksik (%0.47) / 0 sahte, kaçış-yakalanma çelişkisi 0. Shader değişirse bu da değişmeli — GLSL'de gözle görülmeyen işaret/değişken hatalarını yakalayan güvenlik ağı |
 
 **B2 geometrisinin üç kuralı** (shader'a bunlar girecek):
 1. `psi_k = alpha + k*pi`, yalnız `psi_k < psi_max = delta + Δ_kalan` olanlar gerçekleşir.
