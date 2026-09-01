@@ -2,6 +2,8 @@ export interface QualityLevel {
   label: string
   dpr: number
   steps: number
+  /** bloom mip zinciri bu kademede çizilsin mi (bkz. levels tanımındaki not) */
+  bloom: boolean
 }
 
 // Denetim eşikleri. ESKİ TASARIMIN HATASI: çıkış eşiği 48, iniş eşiği 26 idi —
@@ -68,20 +70,38 @@ export class QualityGovernor {
   private readonly listeners = new Set<(level: QualityLevel) => void>()
 
   constructor(deviceRatio: number, coarsePointer = false, pinLabel?: string) {
+    // BLOOM YALNIZ EN ÜST KADEMEDE. Maliyeti 2026-09-01'de yeniden ölçüldü ve
+    // eski atıf YANLIŞ ÇIKTI: pahalı olan mip zinciri değil, HDR YOLUNUN KENDİSİ.
+    // 2.89 Mpix'te üç nokta — zincirli 25.16 ms, zincirsiz ama HDR hedefi duran
+    // 25.40 ms (fark gürültünün altında), hattan tümüyle çıkmış 23.26 ms. Yani
+    // gerçek kalem yarım-float hedefe çizim + tam ekran birleştirme blit'i +
+    // sahnenin iki geçişte çizilmesi. İki kademede ölçüldü: 'yüksek' 2.89 Mpix'te
+    // 25.16 → 23.26 (−1.90 ms), 'orta' 1.77 Mpix'te 14.29 → 13.42 (−0.87 ms;
+    // tavan 60'ta görünmez, ?fps=120 ile GPU'ya bağlı ölçüldü). Yani kabaca
+    // 0.5-0.7 ms/Mpix. Hedef cihazda (1080p = 2.07 Mpix, entegre grafik) bu
+    // ~3-4 ms eder: 10 ms'lik bütçenin üçte biri.
+    // Karşılığında aldığımız görsel bu sahnede ölçüm sınırında: disk üstü hale
+    // 43.4 → 43.6, çünkü shader zaten elle ayarlanmış foton halkası parlaması
+    // taşıyor (minR tabanlı iki exp terimi) ve sahnenin doğrusal tepesi yalnız
+    // 4.3 — ACES omzu eklenen ışığı yutuyor. Bloom'un fiilen yaptığı iş gölgeyi
+    // kaldırmak (0.3 → 6.2). Bu yüzden yalnız 'yüksek'te açık: o kademeye ancak
+    // gerçekten payı olan makine tırmanır. Kapalıyken lens kendi ton eşlemesini
+    // yapar ve doğrudan tuvale çizer — HDR desteği olmayan cihazın zaten
+    // yıllardır kullandığı yol; gölge de daha temiz siyah kalır.
     this.levels = [
-      { label: 'yüksek', dpr: Math.min(deviceRatio, 1.6), steps: 240 },
+      { label: 'yüksek', dpr: Math.min(deviceRatio, 1.6), steps: 240, bloom: true },
       // 60 fps bütçesi 'yüksek' ile 'orta' arasına düşüyordu: ara kademe olmadan
       // governor 40 fps'e ya da gereğinden yumuşak bir görüntüye mahkûmdu
-      { label: 'iyi', dpr: Math.min(deviceRatio, 1.4), steps: 215 },
-      { label: 'orta', dpr: Math.min(deviceRatio, 1.25), steps: 185 },
+      { label: 'iyi', dpr: Math.min(deviceRatio, 1.4), steps: 215, bloom: false },
+      { label: 'orta', dpr: Math.min(deviceRatio, 1.25), steps: 185, bloom: false },
       // kalite tabanı (masaüstü): bundan daha bloklu asla olmaz
-      { label: 'düşük', dpr: 1.0, steps: 150 },
+      { label: 'düşük', dpr: 1.0, steps: 150, bloom: false },
     ]
     this.level = this.indexOf('orta')
     if (coarsePointer || pinLabel === 'mobil') {
       // telefon GPU'su tabana da yetişemezse son çare — yalnız dokunmatik cihazlarda
       // (pin ile masaüstünde de görsel/performans testi için zorlanabilir)
-      this.levels.push({ label: 'mobil', dpr: 0.75, steps: 110 })
+      this.levels.push({ label: 'mobil', dpr: 0.75, steps: 110, bloom: false })
       this.level = this.indexOf('düşük') // dokunmatikte tabandan başla; güç yeterse tırmanır
     }
     this.cool = this.levels.map(() => 0)

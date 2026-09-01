@@ -5,7 +5,7 @@ import type { HoleVisual } from '../physics/presets'
 import type { LabController } from '../sim/LabController'
 import type { QualityGovernor } from '../sim/QualityGovernor'
 import { LENS_FRAGMENT, LENS_VERTEX, createLensUniforms, type LensUniforms } from './lensShader'
-import { LENS_LAYER, supportsHdrPost } from './bloom'
+import { LENS_LAYER, getBloomPipeline, supportsHdrPost } from './bloom'
 import { getNebulaCube } from './nebulaBake'
 
 /** Deliğin gözlenmiş imzasını uniform'lara aktarır — yalnız delik değişince. */
@@ -34,27 +34,40 @@ export function LensedBackground({
   governor: QualityGovernor
 }) {
   const material = useRef<THREE.ShaderMaterial>(null)
+  const mesh = useRef<THREE.Mesh>(null)
   const gl = useThree((s) => s.gl)
   // Bulutsu alanı zamandan bağımsızdır: renderer başına BİR KEZ küp haritasına
   // pişirilir (getNebulaCube önbelleklidir), sonra her karede tek doku
   // okumasıyla gelir — eskiden piksel başına 7 oktav 3B gürültüydü.
   //
-  // Bloom hattı varsa lens DOĞRUSAL HDR yazar (uToneMap 0) ve ayrı bir katmana
+  // HDR yolu açıkken lens DOĞRUSAL HDR yazar (uToneMap 0) ve ayrı bir katmana
   // çekilir: hat yalnız o katmanı HDR hedefe çizip parlamayı ondan üretir.
-  // Hat yoksa mesh normal katmanda kalır ve shader kendi ton eşlemesini yapar.
-  const postFx = useThree((s) => supportsHdrPost(s.gl))
+  // Kapalıyken mesh normal katmanda kalır ve shader kendi ton eşlemesini yapar.
+  //
+  // Bu artık cihaz yeteneğine bağlı SABİT bir seçim değil: kalite kademesi
+  // parlamayı kapatınca hat bütünüyle devre dışı kalır (ölçüm: 2.89 Mpix'te
+  // 2.0 ms — bkz. bloom.ts render()). Kararın sahibi hattır, biz her karede
+  // `active`'i okur ve materyali ona uydururuz. SIRALAMA TUZAĞI YOK: hat
+  // kademe değişimini o an uygulamaz, çizdiği karenin SONUNDA işler
+  // (bkz. setEnabled/commit) — yani bu useFrame ile hattın render'ı bir kare
+  // içinde daima aynı değeri görür. Uygulanmasaydı geçiş karesinde mesh yanlış
+  // katmanda kalıp lens hiç çizilmezdi: tek karelik siyah ekran.
+  const pipeline = useMemo(() => (supportsHdrPost(gl) ? getBloomPipeline(gl) : null), [gl])
   const initialUniforms = useMemo(() => {
     const uniforms = createLensUniforms()
     uniforms.uNebTex.value = getNebulaCube(gl)
-    uniforms.uToneMap.value = supportsHdrPost(gl) ? 0 : 1
+    uniforms.uToneMap.value = pipeline?.active ? 0 : 1
     return uniforms
-  }, [gl])
+  }, [gl, pipeline])
   // son uygulanan görsel imza: preset.visual sabit nesnedir, referans
   // karşılaştırması delik değişimini bedelsiz yakalar
   const appliedVisual = useRef<HoleVisual | null>(null)
   useFrame(({ camera }) => {
     const uniforms = material.current?.uniforms as LensUniforms | undefined
     if (!uniforms) return
+    const hdrPath = pipeline?.active ?? false
+    uniforms.uToneMap.value = hdrPath ? 0 : 1
+    mesh.current?.layers.set(hdrPath ? LENS_LAYER : 0)
     camera.updateMatrixWorld()
     uniforms.uTime.value = controller.simTime
     uniforms.uCamPos.value.copy(camera.position)
@@ -83,13 +96,7 @@ export function LensedBackground({
     if (Math.abs(uniforms.uRealism.value - target) < 0.002) uniforms.uRealism.value = target
   })
   return (
-    <mesh
-      renderOrder={-10}
-      frustumCulled={false}
-      ref={(m) => {
-        m?.layers.set(postFx ? LENS_LAYER : 0)
-      }}
-    >
+    <mesh ref={mesh} renderOrder={-10} frustumCulled={false}>
       <planeGeometry args={[2, 2]} />
       <shaderMaterial
         ref={material}

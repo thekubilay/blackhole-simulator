@@ -27,7 +27,7 @@ import { useGameSnapshot } from './hooks/useGameSnapshot'
 export default function App() {
   const coarsePointer = useMedia('(pointer: coarse)')
   // deps boş: simülasyon bir kez kurulur, kuruluştaki işaretçi türü kullanılır
-  const { controller, governor, game } = useMemo(() => {
+  const { controller, governor, game, bloomPin } = useMemo(() => {
     // ?kalite=yuksek|orta|dusuk|mobil → governor sabitlenir (test/ölçüm aracı)
     const ASCII: Record<string, string> = { yuksek: 'yüksek', dusuk: 'düşük' }
     const params = new URLSearchParams(window.location.search)
@@ -43,7 +43,10 @@ export default function App() {
     const hole = params.get('delik')
     if (hole && PRESETS[hole]) controller.setHole(hole)
     const game = new GameController(controller)
-    return { controller, governor, game }
+    // ?bloom=0|1 → parlama pini (ölçüm/karşılaştırma); yoksa kalite kademesi karar verir
+    const b = params.get('bloom')
+    const bloomPin = b === null ? null : b !== '0'
+    return { controller, governor, game, bloomPin }
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır
   const gameActive = useGameSnapshot(game).active
@@ -76,7 +79,7 @@ export default function App() {
         <SimulationLayer controller={controller} />
         <SpawnPlane onSpawn={controller.spawnAt} />
         {/* En sonda: öncelikli useFrame ile kareyi devralır (bkz. PostFx) */}
-        <PostFx />
+        <PostFx governor={governor} pin={bloomPin} />
       </Canvas>
       <Overlay controller={controller} game={game} />
       <RotateGate />
