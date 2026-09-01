@@ -27,7 +27,7 @@ import { useGameSnapshot } from './hooks/useGameSnapshot'
 export default function App() {
   const coarsePointer = useMedia('(pointer: coarse)')
   // deps boş: simülasyon bir kez kurulur, kuruluştaki işaretçi türü kullanılır
-  const { controller, governor, game, bloomPin } = useMemo(() => {
+  const { controller, governor, game, bloomPin, tables } = useMemo(() => {
     // ?kalite=yuksek|orta|dusuk|mobil → governor sabitlenir (test/ölçüm aracı)
     const ASCII: Record<string, string> = { yuksek: 'yüksek', dusuk: 'düşük' }
     const params = new URLSearchParams(window.location.search)
@@ -46,7 +46,9 @@ export default function App() {
     // ?bloom=0|1 → parlama pini (ölçüm/karşılaştırma); yoksa kalite kademesi karar verir
     const b = params.get('bloom')
     const bloomPin = b === null ? null : b !== '0'
-    return { controller, governor, game, bloomPin }
+    // ?tablo=0 → Bruneton tabloları kapalı, eski marş (A/B ölçümü)
+    const tables = params.get('tablo') !== '0'
+    return { controller, governor, game, bloomPin, tables }
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır
   const gameActive = useGameSnapshot(game).active
@@ -73,7 +75,7 @@ export default function App() {
         <CameraRewind controller={controller} />
         <GameLoop game={game} />
         <GameCamera game={game} />
-        <LensedBackground controller={controller} governor={governor} />
+        <LensedBackground controller={controller} governor={governor} tables={tables} />
         <HorizonOccluders />
         <Lights />
         <SimulationLayer controller={controller} />

@@ -7,6 +7,7 @@ import type { QualityGovernor } from '../sim/QualityGovernor'
 import { LENS_FRAGMENT, LENS_VERTEX, createLensUniforms, type LensUniforms } from './lensShader'
 import { LENS_LAYER, getBloomPipeline, supportsHdrPost } from './bloom'
 import { getNebulaCube } from './nebulaBake'
+import { getLensTables } from './lensTables'
 
 /** Deliğin gözlenmiş imzasını uniform'lara aktarır — yalnız delik değişince. */
 function applyHoleVisual(u: LensUniforms, h: HoleVisual): void {
@@ -29,9 +30,12 @@ function applyHoleVisual(u: LensUniforms, h: HoleVisual): void {
 export function LensedBackground({
   controller,
   governor,
+  tables,
 }: {
   controller: LabController
   governor: QualityGovernor
+  /** false = tablo yolu kapalı, her ışın eski marşa girer (?tablo=0 — A/B ölçümü) */
+  tables: boolean
 }) {
   const material = useRef<THREE.ShaderMaterial>(null)
   const mesh = useRef<THREE.Mesh>(null)
@@ -57,6 +61,10 @@ export function LensedBackground({
     const uniforms = createLensUniforms()
     uniforms.uNebTex.value = getNebulaCube(gl)
     uniforms.uToneMap.value = pipeline?.active ? 0 : 1
+    // Tablolar sahneden bağımsız: süreç başına bir kez pişer (~175 ms, açılış
+    // dolly'si sırasında). Bulutsu küpünün aksine renderer'a değil modüle ait.
+    const lt = getLensTables()
+    uniforms.uDeflTex.value = lt.deflection
     return uniforms
   }, [gl, pipeline])
   // son uygulanan görsel imza: preset.visual sabit nesnedir, referans
@@ -82,6 +90,7 @@ export function LensedBackground({
         : 0
     uniforms.uEsc.value = Math.max(44, jetLen, camera.position.length() + 8)
     uniforms.uSteps.value = governor.current.steps
+    uniforms.uTables.value = tables ? 1 : 0
     // deliğe özgü GERÇEK türetimler: disk iç kenarı = ISCO, verim η = 1 − E_ISCO
     uniforms.uDiskIn.value = controller.visual.diskIn
     uniforms.uEff.value = controller.visual.efficiency
