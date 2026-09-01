@@ -20,9 +20,20 @@ const UP_RATIO = 0.95 // yalnız tavanı fiilen tutturan kademe yukarı denemesi
 const DOWN_HOLD = 3 // sn — EMA'nın yeni kademede oturmasına izin ver
 const UP_HOLD = 12 // sn
 const PROOF_HOLD = 60 // sn kesintisiz rahatlık = kademe kendini kanıtladı
+// Üstteki kademeyi affetmek çok daha ağır bir kanıt ister: bu kademede rahat
+// olmak üsttekinin çalışacağını göstermez. Af eşiği kısa tutulursa (60 sn)
+// eskalasyonu tümden yer ve sahne dakikada bir 3 sn'lik kalite çukuruna girer —
+// ölçüldü: B senaryosunda 10 dakikada 10 çukur. 15 dk KESİNTİSİZ rahatlık
+// (kademe değişimi sayacı sıfırlar) yalnız makine gerçekten boşaldığında dolar;
+// tutturamayan bir kademede kararlı hal ~15 dakikada bir 3 sn'lik tek çukurdur.
+const FORGIVE_HOLD = 900
 const RETRY_BASE = 10 // başarısız kademeye ilk dönüş beklemesi (sn)
-const RETRY_GROWTH = 6 // 10 → 60 → kalıcı yasak: en fazla üç kısa çukur, sonra sessizlik
-const RETRY_MAX = 60
+const RETRY_GROWTH = 6 // bekleme merdiveni: 10 sn → 60 sn → 6 dk → 30 dk (tavan)
+// KALICI YASAK YOKTUR. Sonsuz bekleme, sürdürülemez kademeye çivilenmenin ayna
+// görüntüsüdür: üç geçici tökezleme (GC duraklaması, arka planda başka bir GPU
+// işi) makine yeniden boşaldığında bile görüntü kalitesini oturum boyu düşürürdü.
+// Bekleme üst sınırla kesilir, uzun sakinlik ise cezayı basamak basamak indirir.
+const RETRY_MAX = 1800
 
 /**
  * Adaptif kalite (SRP): yalnız FPS ölçer ve seviye seçer; renderer'a
@@ -39,6 +50,8 @@ export class QualityGovernor {
   /** mevcut kademede KESİNTİSİZ rahat geçen süre (sn) — ceza merdivenini yalnız
    *  bu sıfırlar; 12 sn'lik çıkış penceresi "kanıt" sayılmaz */
   private held = 0
+  /** af sayacı: aynı rahatlık serisinde FORGIVE_HOLD'da bir tetiklenir */
+  private forgive = 0
   private cap = 60
   private downFps = 60 * DOWN_RATIO
   private upFps = 60 * UP_RATIO
@@ -110,6 +123,7 @@ export class QualityGovernor {
     this.stable = 0
     this.acc = 0
     this.held = 0
+    this.forgive = 0
     this.cool.fill(0)
     this.penalty.fill(RETRY_BASE)
   }
@@ -157,7 +171,13 @@ export class QualityGovernor {
     this.ema += (fps - this.ema) * 0.06
     this.acc += dt
     this.stable += dt
-    this.held = this.ema > this.upFps ? this.held + dt : 0
+    if (this.ema > this.upFps) {
+      this.held += dt
+      this.forgive += dt
+    } else {
+      this.held = 0
+      this.forgive = 0
+    }
     for (let i = 0; i < this.cool.length; i++) {
       if (this.cool[i] > 0) this.cool[i] = Math.max(this.cool[i] - dt, 0)
     }
@@ -168,21 +188,29 @@ export class QualityGovernor {
     // takılmanın (GC, GPU tökezlemesi) cezası oturum boyu taşınmasın. Ölçüt
     // bilerek çıkış penceresinden uzun — yoksa komşusu cezalı olduğu için yerinde
     // duran bir kademe merdivenini her turda silip kalıcı yasağa hiç ulaşamazdı.
-    if (this.held > PROOF_HOLD) {
-      this.penalty[this.level] = RETRY_BASE
-      this.held = 0
+    // (held SIFIRLANMAZ: koşul idempotent, sıfırlarsak af eşiğine hiç ulaşılmaz)
+    if (this.held > PROOF_HOLD) this.penalty[this.level] = RETRY_BASE
+    // UZUN sakinlik üstteki kademeyi de affeder: cezası bir basamak iner ve
+    // bekleyen süresi kısalır. Af kademeli, sıfırlama değil — bu kademede rahat
+    // olmak üsttekinin çalışacağını kanıtlamaz (elbette rahat, daha ucuz).
+    const up = this.level - 1
+    if (this.forgive > FORGIVE_HOLD && up >= 0) {
+      this.penalty[up] = Math.max(RETRY_BASE, this.penalty[up] / RETRY_GROWTH)
+      this.cool[up] = Math.min(this.cool[up], this.penalty[up])
+      this.forgive = 0
     }
     if (this.ema < this.downFps && this.stable > DOWN_HOLD && this.level < this.levels.length - 1) {
       // Bu kademe hedefi tutturamadı: aynı yere hemen geri tırmanmak yasak.
-      // Ceza katlanır (10 sn → 60 sn → kalıcı); yoksa iki kademe arasında
-      // sonsuza dek salınırdı — kullanıcı için FPS'in sabit kalmasından beter.
-      // Kalıcı yasağı yalnız elle kalite seçimi (setLevel) kaldırır.
+      // Bekleme katlanır (10 sn → 60 sn → 6 dk → 30 dk tavanı); yoksa iki kademe
+      // arasında sonsuza dek salınırdı — kullanıcı için FPS'in sabit kalmasından
+      // beter. Tavana ulaşınca deneme seyrekleşir ama hiç bitmez: makine
+      // boşalırsa kalite geri gelir.
       this.cool[this.level] = this.penalty[this.level]
-      this.penalty[this.level] =
-        this.penalty[this.level] >= RETRY_MAX ? Infinity : this.penalty[this.level] * RETRY_GROWTH
+      this.penalty[this.level] = Math.min(this.penalty[this.level] * RETRY_GROWTH, RETRY_MAX)
       this.level++
       this.stable = 0
       this.held = 0
+      this.forgive = 0
       this.notify()
     } else if (
       this.ema > this.upFps &&
@@ -193,6 +221,7 @@ export class QualityGovernor {
       this.level--
       this.stable = 0
       this.held = 0
+      this.forgive = 0
       this.notify()
     }
   }
