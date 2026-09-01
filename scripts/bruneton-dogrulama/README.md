@@ -17,6 +17,26 @@ uygulama github.com/ebruneton/black_hole_shader (BSD-3-Clause).
 | `cerceve2.mjs` | çerçeve eşlemesi öz-testi: φ_c = 2Δ_apsis − Δ_kalan + π − δ ⇒ U(e², φ_c) ≈ 1/r_kamera |
 | `daltesti.mjs` | tableDefl'deki apsis-simetri dalının yönü: mevcut yön 0.0012-0.0131 mrad, ters yön 141.75 mrad + 154 yakalama çelişkisi |
 
+## Faz B2 oracle'ı (kesişim geometrisi) — hazır, shader'a girmedi
+
+| betik | ne kanıtlar |
+|---|---|
+| `kesisimB2.mjs` | KAÇAN ışınlar: disk düzlemi kesişimlerinin konumu ve ışının oradaki yönü tablodan analitik çıkıyor. 2888/2916 kesişim eşleşti; yarıçap medyan %0.098 (p99 %0.31), konum medyan 0.0097 birim, YÖN medyan 0.795 mrad (p99 20.6) |
+| `b2yakalanan.mjs` | YAKALANAN ışınlar (gölge önündeki iç disk): apsis YOK, `phi_c = Δ_ham + π − δ` (2Δ_apsis düzeltmesi yok, yansıtma yok). Eşleşenlerde yarıçap %0.036, konum 0.0022 birim |
+| `b2teshis.mjs` | eksik kesişimlerin sebep ayrıştırması |
+
+**B2 geometrisinin üç kuralı** (shader'a bunlar girecek):
+1. `psi_k = alpha + k*pi`, yalnız `psi_k < psi_max = delta + Δ_kalan` olanlar gerçekleşir.
+2. `phi = phi_c + psi_k`; **apsis simetrisi ŞART**: `phi > phi_a` ise `phi_eff = 2*phi_a − phi`.
+   Yansıtmasız kesişimlerin %20'si düşüyor (kameramız disk kenarında, phi_c zaten phi_ub'ye yakın).
+3. Kesişimdeki yön tablodan değil ENERJİ BAĞINTISINDAN: `u̇ = ±√(e² + u³ − u²)`,
+   işaret `phi < phi_a` ise +; yön `normalize((−u̇/u)·er + et)`.
+
+**Bilinen sınır:** ISCO altındaki (r ≲ 2.3) kesişimler `phi_ub` kapsamının dışında
+kalabiliyor — kaçan ışınlarda 26/2916, yakalananlarda 138/404. Hepsi gölgenin
+içinde ve yalnız sönük atmosfere katkı verdiği için görsel etkisi ihmal edilebilir;
+gerekirse `bakeInverseRadius`'un phi aralığı bizim tablomuz olduğu için genişletilebilir.
+
 Not: `kesisim.mjs`/`kesisim2.mjs` (Bruneton'un mod-π iki-görüntü şemasının bizde
 neden ÇALIŞMADIĞINI gösteren ara adımlar) tarihçe olarak hafızada; şemanın
 varsayımı kameranın diskin dışında olması, bizim kamera disk kenarında.
