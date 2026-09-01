@@ -67,6 +67,7 @@ export class LabController implements LabCommands, SnapshotSource {
     this.presets = presets
     this.preset = presets[initialPresetId]
     this.fpsCap = initialFpsCap
+    this.governor.setFrameCap(initialFpsCap)
     this.snap = this.buildSnapshot()
   }
 
@@ -78,6 +79,8 @@ export class LabController implements LabCommands, SnapshotSource {
   setFpsCap(cap: 60 | 120): void {
     if (cap === this.fpsCap) return
     this.fpsCap = cap
+    // governor eşikleri tavanın oranıdır: tavan değişti, ölçüm geçmişi geçersiz
+    this.governor.setFrameCap(cap)
     this.hint =
       cap === 120
         ? '120 fps tavanı: ProMotion ekranda gözle görülür akıcılık — GPU işi ~2 katına çıkar, 60 Hz ekranda fark yaratmaz (vsync).'
@@ -103,7 +106,12 @@ export class LabController implements LabCommands, SnapshotSource {
       }
     }
     if (dtSim > 0) this.sim.step(dtSim)
-    this.governor.tick(delta)
+    // Gizli sekmede kare döngüsü KASITLI olarak ~10 fps'e iner (FrameLoopDriver,
+    // HIDDEN_INTERVAL_MS). Bu sahte yavaşlık governor'a yedirilirse her 1.5 sn'de
+    // bir kademe inilir, her inişte geri-tepme cezası damgalanır ve sekme yarım
+    // dakika arka planda kalınca simülasyon kalıcı olarak tabana çivilenir.
+    // Arka plandaki sekme kalite kararı vermez.
+    if (!document.hidden) this.governor.tick(delta)
     this.emitAcc += dt
     if (this.emitAcc >= 0.2) {
       this.emitAcc = 0
