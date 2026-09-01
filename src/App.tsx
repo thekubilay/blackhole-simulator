@@ -51,10 +51,12 @@ export default function App() {
     // ?b2=0 → disk kesişimleri tablodan ÇIKARILIR, hepsi marşa döner (A/B ölçümü).
     // Varsayılan AÇIK: ölçüldü, 'yüksek'te 23.60 → 9.26 ms (2.55x).
     const b2 = params.get('b2') !== '0'
-    // ?fon=0.6 → KATMANLI RENDER: lens fonu ayrı hedefte 0.6x çözünürlükte
-    // çizilir, gemi/HUD tam çözünürlükte üstüne kompozitlenir. 1 = kapalı.
-    const fon = Number(params.get('fon'))
-    const lensScale = Number.isFinite(fon) && fon > 0 ? Math.min(Math.max(fon, 0.3), 1) : 1
+    // ?fon=0.6 → katmanlı render ölçeği PİNLENİR (A/B ölçümü). Pin yoksa
+    // ölçeği kalite kademesi belirler (QualityGovernor.levels).
+    const fonRaw = params.get('fon')
+    const fon = Number(fonRaw)
+    const lensScale =
+      fonRaw !== null && Number.isFinite(fon) && fon > 0 ? Math.min(Math.max(fon, 0.3), 1) : null
     return { controller, governor, game, bloomPin, tables, b2, lensScale }
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır

@@ -4,6 +4,11 @@ export interface QualityLevel {
   steps: number
   /** bloom mip zinciri bu kademede çizilsin mi (bkz. levels tanımındaki not) */
   bloom: boolean
+  /**
+   * KATMANLI RENDER: lens fonunun çözünürlük ölçeği (1 = tam). Gemi, parçacık
+   * ve HUD bundan ETKİLENMEZ — onlar dpr'da çizilir. Bkz. levels tanımı.
+   */
+  lensScale: number
 }
 
 // Denetim eşikleri. ESKİ TASARIMIN HATASI: çıkış eşiği 48, iniş eşiği 26 idi —
@@ -88,20 +93,36 @@ export class QualityGovernor {
     // gerçekten payı olan makine tırmanır. Kapalıyken lens kendi ton eşlemesini
     // yapar ve doğrudan tuvale çizer — HDR desteği olmayan cihazın zaten
     // yıllardır kullandığı yol; gölge de daha temiz siyah kalır.
+    // MERDİVEN YENİDEN KURULDU (2026-09-01, Bruneton sonrası ölçümlerle).
+    //
+    // (1) dpr YERİNE lensScale: eskiden her kademe dpr'ı indiriyordu, yani
+    //     GEMİ, HUD ve YAZI da bulanıklaşıyordu. Lens artık ayrı bir hedefe
+    //     çizildiği için yalnız FONU küçültebiliyoruz; üstüne gelen her şey
+    //     tam çözünürlükte kalıyor. Lens maliyeti piksele doğrusal
+    //     (2.04 ms/Mpix ölçüldü) olduğundan (dpr × lensScale)² eski dpr² ile
+    //     aynı işi görür — bedeli çıktı tarafının büyümesi (0.68 ms/Mpix).
+    // (2) ALT İKİ KADEMEDE dpr DA İNİYOR: orada bütçe dar ve çıktı tarafının
+    //     (birleştirme blit'i + sahne geçişi) maliyeti de sayılır; yalnız fonu
+    //     küçültmek yetmez.
+    // (3) ADIM MERDİVENİ DÜZLEŞTİ: marş artık yalnız yakalanan ışınlar ve jet
+    //     için koşuyor, adım duyarlılığı 12× azaldı (0.0025 vs 0.029
+    //     ms/adım/Mpix ölçüldü). Üst iki kademede 240 artık bedavaya yakın.
+    //     Alt kademelerde yine de kısılıyor: zayıf GPU'da 90 adım ~1.4 ms.
     this.levels = [
-      { label: 'yüksek', dpr: Math.min(deviceRatio, 1.6), steps: 240, bloom: true },
+      { label: 'yüksek', dpr: Math.min(deviceRatio, 1.6), steps: 240, bloom: true, lensScale: 1.0 },
       // 60 fps bütçesi 'yüksek' ile 'orta' arasına düşüyordu: ara kademe olmadan
       // governor 40 fps'e ya da gereğinden yumuşak bir görüntüye mahkûmdu
-      { label: 'iyi', dpr: Math.min(deviceRatio, 1.4), steps: 215, bloom: false },
-      { label: 'orta', dpr: Math.min(deviceRatio, 1.25), steps: 185, bloom: false },
+      { label: 'iyi', dpr: Math.min(deviceRatio, 1.6), steps: 240, bloom: false, lensScale: 0.85 },
+      { label: 'orta', dpr: Math.min(deviceRatio, 1.6), steps: 220, bloom: false, lensScale: 0.75 },
       // kalite tabanı (masaüstü): bundan daha bloklu asla olmaz
-      { label: 'düşük', dpr: 1.0, steps: 150, bloom: false },
+      { label: 'düşük', dpr: Math.min(deviceRatio, 1.25), steps: 200, bloom: false, lensScale: 0.75 },
     ]
     this.level = this.indexOf('orta')
     if (coarsePointer || pinLabel === 'mobil') {
       // telefon GPU'su tabana da yetişemezse son çare — yalnız dokunmatik cihazlarda
       // (pin ile masaüstünde de görsel/performans testi için zorlanabilir)
-      this.levels.push({ label: 'mobil', dpr: 0.75, steps: 110, bloom: false })
+      // Telefonda çıktı tarafı da pahalı: dpr düşük kalır, fon ek olarak kısılır
+      this.levels.push({ label: 'mobil', dpr: 0.75, steps: 150, bloom: false, lensScale: 0.85 })
       this.level = this.indexOf('düşük') // dokunmatikte tabandan başla; güç yeterse tırmanır
     }
     this.cool = this.levels.map(() => 0)

@@ -24,24 +24,21 @@ function BloomDriver({
 }: {
   governor: QualityGovernor
   pin: boolean | null
-  lensScale: number
+  lensScale: number | null
 }) {
   const pipeline = useThree((s) => getBloomPipeline(s.gl))
-  // Katmanlı render ölçeği KURULUMDA verilir (bkz. BloomPipeline.lensScale):
-  // lens'in uToneMap/katman durumuyla senkron gitmesi gerektiği için çalışma
-  // anında değiştirilmez.
+  // Parlama ve katmanlı render ölçeğinin ikisi de kalite kademesinden gelir;
+  // pinler (?bloom=, ?fon=) kademe kararını ezer. Hat bu isteklerin ikisini de
+  // kare SONUNDA işler (BloomPipeline.commit) — geçiş karesinde lens'in
+  // uToneMap/katman durumuyla çizilen yol asla ayrışmaz.
   useEffect(() => {
-    pipeline.setLensScale(lensScale)
-  }, [pipeline, lensScale])
-  useEffect(() => {
-    if (pin !== null) {
-      // ?bloom=0|1 → ölçüm/karşılaştırma pini: kademe kararını ezer
-      pipeline.setEnabled(pin)
-      return
+    const uygula = (level: { bloom: boolean; lensScale: number }) => {
+      pipeline.setEnabled(pin !== null ? pin : level.bloom)
+      pipeline.setLensScale(lensScale !== null ? lensScale : level.lensScale)
     }
-    pipeline.setEnabled(governor.current.bloom)
-    return governor.onChange((level) => pipeline.setEnabled(level.bloom))
-  }, [governor, pipeline, pin])
+    uygula(governor.current)
+    return governor.onChange(uygula)
+  }, [governor, pipeline, pin, lensScale])
   useFrame(({ scene, camera }) => pipeline.render(scene, camera), 1)
   return null
 }
@@ -59,8 +56,8 @@ export function PostFx({
 }: {
   governor: QualityGovernor
   pin: boolean | null
-  /** lens fonunun çözünürlük ölçeği (?fon=); 1 = tam çözünürlük */
-  lensScale: number
+  /** ?fon= pini; null ise kalite kademesinin lensScale'i kullanılır */
+  lensScale: number | null
 }) {
   const enabled = useThree((s) => supportsHdrPost(s.gl))
   return enabled ? <BloomDriver governor={governor} pin={pin} lensScale={lensScale} /> : null

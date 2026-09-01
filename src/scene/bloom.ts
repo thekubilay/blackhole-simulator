@@ -188,11 +188,15 @@ export class BloomPipeline {
    * çözünürlükte çizilir, yani keskin kalır. setDpr'ın aksine bu, keskinliği
    * yalnız düşük frekanslı fondan alır.
    *
-   * Yalnız KURULUMDA ayarlanır (?fon= pini). Çalışma anında değiştirmek
-   * lens'in uToneMap/katman durumuyla senkron gitmeli — enabled'daki commit
-   * dansının aynısı gerekir; bugün gerekmediği için o karmaşa eklenmedi.
+   * Kalite kademesi bunu ÇALIŞMA ANINDA değiştirir, bu yüzden enabled ile
+   * AYNI commit dansına tabidir: istek `wantedScale`e yazılır ve çizilen
+   * karenin SONUNDA işlenir. Sebebi enabled ile aynı — `usesTarget` bu ikisinin
+   * OR'u, ve lens'in uToneMap/katman durumu onunla aynı kare içinde tutarlı
+   * olmak zorunda; yoksa geçiş karesinde lens ya hiç çizilmez ya iki kez ton
+   * eşlenir.
    */
   private lensScale = 1
+  private wantedScale = 1
 
   private readonly prefilter: THREE.ShaderMaterial
   private readonly down: THREE.ShaderMaterial
@@ -280,18 +284,16 @@ export class BloomPipeline {
     return this.enabled || this.lensScale < 0.999
   }
 
-  /** Kurulumda çağrılır (?fon=). Bkz. lensScale açıklaması. */
+  /** Kalite kademesi ya da ?fon= pini çağırır; kare sonunda işlenir. */
   setLensScale(scale: number): void {
-    const next = Math.min(Math.max(scale, 0.3), 1)
-    if (next === this.lensScale) return
-    this.lensScale = next
-    this.width = 0
+    this.wantedScale = Math.min(Math.max(scale, 0.3), 1)
   }
 
   /** Kare sonu: istenen yol ile çizilen yolu eşitle. */
   private commit(): void {
-    if (this.wanted === this.enabled) return
+    if (this.wanted === this.enabled && this.wantedScale === this.lensScale) return
     this.enabled = this.wanted
+    this.lensScale = this.wantedScale
     for (const m of this.mips) m.dispose()
     this.mips = []
     // Kapalıyken HDR hedefi de tutulmaz: retina'da 2419x1195 yarım-float RGBA
