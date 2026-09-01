@@ -15,7 +15,13 @@ export interface QualityLevel {
 // 50/57 ile 120 tavanında 70 fps veren bir kademe hem "rahat" (57 üstü) hem
 // "sorunsuz" (50 üstü) sayılır, governor en pahalı kademeye tırmanıp bir daha
 // inmezdi — düzeltilen hatanın 120'lik ölçekte birebir tekrarı.
-const DOWN_RATIO = 0.83 // tavanın belirgin altına sarkan kademe terk edilir (60 → 50)
+// 0.83 iken ÖLÇÜLDÜ: 'iyi' kademesi 1512x803 penceresinde 53 fps veriyor, yani
+// iniş eşiği (50) ile çıkış eşiği (57) arasına tam ortasına düşüyor — governor
+// onu deneyip deneyip geri bırakıyordu. 0.80 bandı genişletir: 48 fps üstünü
+// "kabul edilebilir" sayar ve daha keskin kademe yerleşir. BEDELİ ISI: tavanı
+// tutturamayan kademe GPU'yu %100 doluluğa çıkarır (60 fps'te 'orta' %86'da
+// kalır), fan daha erken döner. Bkz. lens-maliyet-butcesi / ısı çalışması.
+const DOWN_RATIO = 0.8 // tavanın altında kabul edilebilir bant (60 → 48)
 const UP_RATIO = 0.95 // yalnız tavanı fiilen tutturan kademe yukarı denemesi yapar (60 → 57)
 const DOWN_HOLD = 3 // sn — EMA'nın yeni kademede oturmasına izin ver
 const UP_HOLD = 12 // sn
