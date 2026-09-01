@@ -5,8 +5,9 @@ import type { HoleVisual } from '../physics/presets'
 import type { LabController } from '../sim/LabController'
 import type { QualityGovernor } from '../sim/QualityGovernor'
 import { LENS_FRAGMENT, LENS_VERTEX, createLensUniforms, type LensUniforms } from './lensShader'
-import { LENS_LAYER, supportsHdrPost } from './bloom'
+import { LENS_LAYER, getBloomPipeline, supportsHdrPost } from './bloom'
 import { getNebulaCube } from './nebulaBake'
+import { getLensTables } from './lensTables'
 
 /** Deliğin gözlenmiş imzasını uniform'lara aktarır — yalnız delik değişince. */
 function applyHoleVisual(u: LensUniforms, h: HoleVisual): void {
@@ -29,32 +30,52 @@ function applyHoleVisual(u: LensUniforms, h: HoleVisual): void {
 export function LensedBackground({
   controller,
   governor,
+  tables,
 }: {
   controller: LabController
   governor: QualityGovernor
+  /** false = tablo yolu kapalı, her ışın eski marşa girer (?tablo=0 — A/B ölçümü) */
+  tables: boolean
 }) {
   const material = useRef<THREE.ShaderMaterial>(null)
+  const mesh = useRef<THREE.Mesh>(null)
   const gl = useThree((s) => s.gl)
   // Bulutsu alanı zamandan bağımsızdır: renderer başına BİR KEZ küp haritasına
   // pişirilir (getNebulaCube önbelleklidir), sonra her karede tek doku
   // okumasıyla gelir — eskiden piksel başına 7 oktav 3B gürültüydü.
   //
-  // Bloom hattı varsa lens DOĞRUSAL HDR yazar (uToneMap 0) ve ayrı bir katmana
+  // HDR yolu açıkken lens DOĞRUSAL HDR yazar (uToneMap 0) ve ayrı bir katmana
   // çekilir: hat yalnız o katmanı HDR hedefe çizip parlamayı ondan üretir.
-  // Hat yoksa mesh normal katmanda kalır ve shader kendi ton eşlemesini yapar.
-  const postFx = useThree((s) => supportsHdrPost(s.gl))
+  // Kapalıyken mesh normal katmanda kalır ve shader kendi ton eşlemesini yapar.
+  //
+  // Bu artık cihaz yeteneğine bağlı SABİT bir seçim değil: kalite kademesi
+  // parlamayı kapatınca hat bütünüyle devre dışı kalır (ölçüm: 2.89 Mpix'te
+  // 2.0 ms — bkz. bloom.ts render()). Kararın sahibi hattır, biz her karede
+  // `active`'i okur ve materyali ona uydururuz. SIRALAMA TUZAĞI YOK: hat
+  // kademe değişimini o an uygulamaz, çizdiği karenin SONUNDA işler
+  // (bkz. setEnabled/commit) — yani bu useFrame ile hattın render'ı bir kare
+  // içinde daima aynı değeri görür. Uygulanmasaydı geçiş karesinde mesh yanlış
+  // katmanda kalıp lens hiç çizilmezdi: tek karelik siyah ekran.
+  const pipeline = useMemo(() => (supportsHdrPost(gl) ? getBloomPipeline(gl) : null), [gl])
   const initialUniforms = useMemo(() => {
     const uniforms = createLensUniforms()
     uniforms.uNebTex.value = getNebulaCube(gl)
-    uniforms.uToneMap.value = supportsHdrPost(gl) ? 0 : 1
+    uniforms.uToneMap.value = pipeline?.active ? 0 : 1
+    // Tablolar sahneden bağımsız: süreç başına bir kez pişer (~175 ms, açılış
+    // dolly'si sırasında). Bulutsu küpünün aksine renderer'a değil modüle ait.
+    const lt = getLensTables()
+    uniforms.uDeflTex.value = lt.deflection
     return uniforms
-  }, [gl])
+  }, [gl, pipeline])
   // son uygulanan görsel imza: preset.visual sabit nesnedir, referans
   // karşılaştırması delik değişimini bedelsiz yakalar
   const appliedVisual = useRef<HoleVisual | null>(null)
   useFrame(({ camera }) => {
     const uniforms = material.current?.uniforms as LensUniforms | undefined
     if (!uniforms) return
+    const hdrPath = pipeline?.active ?? false
+    uniforms.uToneMap.value = hdrPath ? 0 : 1
+    mesh.current?.layers.set(hdrPath ? LENS_LAYER : 0)
     camera.updateMatrixWorld()
     uniforms.uTime.value = controller.simTime
     uniforms.uCamPos.value.copy(camera.position)
@@ -69,6 +90,7 @@ export function LensedBackground({
         : 0
     uniforms.uEsc.value = Math.max(44, jetLen, camera.position.length() + 8)
     uniforms.uSteps.value = governor.current.steps
+    uniforms.uTables.value = tables ? 1 : 0
     // deliğe özgü GERÇEK türetimler: disk iç kenarı = ISCO, verim η = 1 − E_ISCO
     uniforms.uDiskIn.value = controller.visual.diskIn
     uniforms.uEff.value = controller.visual.efficiency
@@ -83,13 +105,7 @@ export function LensedBackground({
     if (Math.abs(uniforms.uRealism.value - target) < 0.002) uniforms.uRealism.value = target
   })
   return (
-    <mesh
-      renderOrder={-10}
-      frustumCulled={false}
-      ref={(m) => {
-        m?.layers.set(postFx ? LENS_LAYER : 0)
-      }}
-    >
+    <mesh ref={mesh} renderOrder={-10} frustumCulled={false}>
       <planeGeometry args={[2, 2]} />
       <shaderMaterial
         ref={material}

@@ -176,6 +176,10 @@ export class BloomPipeline {
   private mips: THREE.WebGLRenderTarget[] = []
   private width = 0
   private height = 0
+  /** ŞU AN ÇİZİLEN yol: false ise HDR hattı tümüyle atlanır */
+  private enabled = true
+  /** kalite kademesinin istediği yol; kare SONUNDA işlenir (bkz. render) */
+  private wanted = true
 
   private readonly prefilter: THREE.ShaderMaterial
   private readonly down: THREE.ShaderMaterial
@@ -222,6 +226,48 @@ export class BloomPipeline {
     this.quad.frustumCulled = false
     this.quadScene = new THREE.Scene().add(this.quad)
     this.quadCamera = new THREE.Camera()
+  }
+
+  /**
+   * Parlamayı açar/kapatır — kalite kademesi karar verir (QualityGovernor).
+   * Kapalıyken mip zinciri ÇİZİLMEZ ve hedefleri SERBEST BIRAKILIR (retina'da
+   * ~8 MB VRAM). Görüntü bloom öncesi hâline birebir döner: birleştirme geçişi
+   * uStrength = 0 ile aynı ton eşlemesini yapar, yani HDR yolu ve ekran
+   * transformu değişmez — yalnız parlama katkısı sıfırlanır.
+   */
+  /**
+   * Parlamayı (ve onunla birlikte tüm HDR yolunu) açar/kapatır — kararı kalite
+   * kademesi verir (QualityGovernor).
+   *
+   * İSTEK HEMEN UYGULANMAZ, çizilen karenin SONUNDA işlenir. Sebep: lens'in
+   * ton eşlemesi ve katmanı (LensedBackground) ile burada çizilen yol aynı kare
+   * içinde tutarlı olmak zorunda. Kademe kararı bir başka useFrame abonesinin
+   * (governor) içinden gelir ve R3F aboneleri kayıt sırasına göre çağırır —
+   * yani karar, lens'in o kareyi çoktan hazırlamış olmasından SONRA düşebilir.
+   * Anında uygulansaydı geçiş karesinde mesh yanlış katmanda kalır ve lens hiç
+   * çizilmezdi: tek karelik siyah ekran. Kare sonuna ertelemek bu pencereyi
+   * tümüyle kapatır; bedeli, değişimin bir kare gecikmesidir.
+   */
+  setEnabled(on: boolean): void {
+    this.wanted = on
+  }
+
+  /** BU KARENİN yolu: parlama ve HDR hattı devrede mi (LensedBackground okur). */
+  get active(): boolean {
+    return this.enabled
+  }
+
+  /** Kare sonu: istenen yol ile çizilen yolu eşitle. */
+  private commit(): void {
+    if (this.wanted === this.enabled) return
+    this.enabled = this.wanted
+    for (const m of this.mips) m.dispose()
+    this.mips = []
+    // Kapalıyken HDR hedefi de tutulmaz: retina'da 2419x1195 yarım-float RGBA
+    // ~23 MB. 1x1'e indirmek dokuyu canlı bırakır, resize() açılışta gerçek
+    // boyuta geri kurar.
+    if (!this.enabled) this.hdr.setSize(1, 1)
+    this.width = 0
   }
 
   /** Ayarları canlı değiştirir (DEV'de `__bloom.set({...})` ile denemek için). */
@@ -274,6 +320,27 @@ export class BloomPipeline {
    */
   render(scene: THREE.Scene, camera: THREE.Camera): void {
     const { renderer } = this
+    // DOĞRUDAN YOL (parlama kapalı). Yalnız mip zincirini atlamak ÖLÇÜLDÜ ve
+    // HİÇBİR ŞEY kazandırmıyor: 2.89 Mpix'te 25.16 → 25.40 ms, yani zincir
+    // gürültünün altında (~0.3 ms). Maliyetin tamamı yolun KENDİSİNDE —
+    // yarım-float hedefe çizim + tam ekran birleştirme blit'i + sahnenin iki
+    // geçişte (lens katmanı, sonra geri kalanı) çizilmesi: 25.16 → 23.26 ms.
+    // 'orta' kademesinde de doğrulandı (1.77 Mpix, ?fps=120): 14.29 → 13.42 ms.
+    // Kabaca 0.5-0.7 ms/Mpix; hedef cihazda (1080p, entegre grafik) ~3-4 ms,
+    // 10 ms'lik bütçenin üçte biri. Bu yüzden kapalı demek "zinciri
+    // atla" değil, "hattan tümüyle çık" demek: lens kendi ton eşlemesini yapar
+    // (uToneMap = 1) ve 0. katmanda kalır — ikisini de LensedBackground her
+    // karede `active`'e bakarak yazar, yani burada ekstra bir sözleşme yok.
+    if (!this.enabled) {
+      const prevAutoClear = renderer.autoClear
+      camera.layers.set(0)
+      renderer.setRenderTarget(null)
+      renderer.autoClear = true
+      renderer.render(scene, camera)
+      renderer.autoClear = prevAutoClear
+      this.commit()
+      return
+    }
     const size = renderer.getDrawingBufferSize(new THREE.Vector2())
     this.resize(size.x, size.y)
     const prevAutoClear = renderer.autoClear
@@ -328,6 +395,7 @@ export class BloomPipeline {
     renderer.render(scene, camera)
 
     renderer.autoClear = prevAutoClear
+    this.commit()
   }
 
   dispose(): void {

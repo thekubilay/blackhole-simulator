@@ -344,6 +344,71 @@ ${DISPLAY_TRANSFORM_GLSL}
 // HDR hedefi olmayan cihazda shader kendi ekran transformunu uygular.
 uniform float uToneMap;
 vec3 outColor(vec3 col, vec2 ndc){ return uToneMap > 0.5 ? finish(col, ndc) : col; }
+
+// ── BRUNETON TABLOLARI (arXiv:2010.08735) ──────────────────────────────
+// Piksel başına jeodezik marş yerine iki sabit zamanlı doku araması.
+// Tablolar lensTables.ts'te pişirilir — doğrulama sayıları ve pişirme
+// yöntemi oradaki yorumlarda. Burada yalnız arama + düzlem geometrisi var.
+// Referans uygulama BSD-3-Clause, Copyright (c) 2020 Eric Bruneton.
+uniform sampler2D uDeflTex;
+uniform float uTables;             // 0 = yalnız eski marş (?tablo=0 ile A/B)
+#define KMU 0.148148148148         // 4/27 — kritik e²; b_krit = 3√3/2
+#define PI_ 3.14159265358979
+
+/** u̇ = 0 noktası; e² = KMU'da foton küresine (u = 2/3) oturur */
+float uApsisT(float e2){
+  float x = clamp((2.0/KMU)*e2 - 1.0, -1.0, 1.0);
+  return 1.0/3.0 + (2.0/3.0)*sin(asin(x)/3.0);
+}
+float deflTexU(float e2){
+  return e2 < KMU ? 0.5 - sqrt(-log(max(1.0 - e2/KMU, 1e-20))*0.02)
+                  : 0.5 + sqrt(-log(max(1.0 - KMU/e2, 1e-20))*0.02);
+}
+float deflTexV(float e2, float u){
+  if(e2 > KMU){
+    float x = u < 2.0/3.0 ? -sqrt(2.0/3.0 - u) : sqrt(u - 2.0/3.0);
+    return (sqrt(2.0/3.0) + x)/(sqrt(2.0/3.0) + sqrt(1.0/3.0));
+  }
+  return 1.0 - sqrt(max(1.0 - u/uApsisT(e2), 0.0));
+}
+float texco(float x, float n){ return 0.5/n + x*(1.0 - 1.0/n); }
+
+// RG32F WebGL2 çekirdeğinde SÜZÜLEBİLİR DEĞİL (OES_texture_float_linear ister)
+// ve bu shader GLSL ES 1.00 olduğu için texelFetch de yok. Bilinear elle
+// yapılır: dokular NEAREST bağlanır, dört komşunun TEKSEL MERKEZİ örneklenir.
+// Aritmetik, doğrulama koşumundaki sample2() ile birebir aynıdır.
+vec2 fetch2(sampler2D t, vec2 sz, vec2 tc){
+  vec2 f = tc*sz - 0.5;
+  vec2 i = floor(f), w = f - i;
+  vec2 c0 = (clamp(i,       vec2(0.), sz - 1.0) + 0.5)/sz;
+  vec2 c1 = (clamp(i + 1.0, vec2(0.), sz - 1.0) + 0.5)/sz;
+  vec2 s0 = mix(texture2D(t, vec2(c0.x, c0.y)).rg, texture2D(t, vec2(c1.x, c0.y)).rg, w.x);
+  vec2 s1 = mix(texture2D(t, vec2(c0.x, c1.y)).rg, texture2D(t, vec2(c1.x, c1.y)).rg, w.x);
+  return mix(s0, s1, w.y);
+}
+
+/** TraceRay'in sapma kısmı. Dönüş < 0 ise ışın ufka düşer. */
+float tableDefl(float u, float ud, float e2, out float apsisDefl){
+  float tx = texco(deflTexU(e2), 512.0);
+  apsisDefl = fetch2(uDeflTex, vec2(512.0), vec2(tx, texco(1.0, 512.0))).x;
+  if(e2 < KMU && u > 2.0/3.0) return -1.0;
+  float d = fetch2(uDeflTex, vec2(512.0), vec2(tx, texco(deflTexV(e2, u), 512.0))).x;
+  // DÖNÜŞ DEĞERİ "KALAN" SAPMADIR (kameradan sonsuza) — kaçış yönü δ' = δ + Δ_kalan
+  // tam bunu ister. Tablo, Δ'yı İÇE GİDEN dal boyunca biriktirir (u = 0'dan u'ya;
+  // bkz. lensTables.ts pişirme döngüsü, u̇ = +e'den başlar). Uzlaşım: ud = −u/tanδ,
+  // yani ud > 0 = içe giden ışın (minR satırıyla aynı uzlaşım).
+  //   • içe giden (ud > 0): önündeki yol apsise inip sonsuza çıkmak →
+  //     kalan = toplam − birikmiş = 2Δ_apsis − Δ_ham. e² ≥ KMU ise apsis yok: ufka
+  //     düşer, −1 (yakalandı).
+  //   • dışa giden (ud < 0): önündeki yol, içe giden bacağın aynası →
+  //     kalan = Δ_ham (çevirme YOK).
+  // Bruneton'un TraceRay'i ile birebir aynı dal ve işaret uzlaşımı. ÖLÇÜLDÜ
+  // (scripts/bruneton-dogrulama/daltesti.mjs): bu yön medyan 0.0012-0.0131 mrad;
+  // TERS yön medyan 141.75 mrad + 154 yakalama çelişkisi. DİKKAT: birikmiş sapma
+  // isteyen bir tüketici (φ_c hesabı, B2) bunun tersini türetmeli: 2Δ_apsis − dönüş.
+  if(ud > 0.0) d = e2 < KMU ? 2.0*apsisDefl - d : -1.0;
+  return d;
+}
 void main(){
   vec2 ndc = vUv*2.-1.;
   vec4 vp = uProjInv*vec4(ndc,-1.,1.); vp/=vp.w;
@@ -359,6 +424,78 @@ void main(){
   vec3 v = normalize(rd + (f0 - 1.)*dot(rd, pr)*pr);
   vec3 L = cross(p, v); float h2 = dot(L,L);
   vec4 acc = vec4(0.);
+  // ── TABLO YOLU ────────────────────────────────────────────────────────
+  // Marş yalnız HACİMLİ örnekleme gerçekten gerektiğinde koşar. Işın disk
+  // bandına hiç değmiyorsa (kare payının büyük kısmı: yıldız/bulutsu) kaçış
+  // yönü tablodan sabit zamanda gelir ve 240 adımın TAMAMI atlanır — üstelik
+  // sonuç daha doğru (marş: medyan 4.86 mrad hata, tablo: 0.0045).
+  //
+  // KASITLI OLARAK DAR TUTULDU (B1): yakalanan ışın da, jet de, disk bandına
+  // değen ışın da eski marşa düşer. Yakalanan ışın gölgeye düşmeden ÖNCE diski
+  // kesebilir (gölgenin önündeki iç disk) ve bizim diskimiz HACİMLİdir —
+  // ikisi de tablodan tek bir kesişim noktasıyla çıkarılamaz. O iş B2.
+  if(uTables > 0.5){
+    vec3 ez = cross(pr, v);
+    float ezl = length(ez);
+    // ezl ≈ 0: ışın tam radyal. Işın düzlemi tanımsız, tablo eşlemesi de
+    // (ud = -u/tan(delta)) ıraksar — bu ışınlar marşa bırakılır.
+    if(ezl > 1e-5){
+      ez /= ezl;
+      vec3 ey = cross(ez, pr);
+      float delta = acos(clamp(dot(pr, v), -1.0, 1.0));
+      float u = 1.0/r0;
+      float ud = -u/tan(delta);
+      float e2 = ud*ud + u*u*(1.0 - u);
+      float apsisDefl;
+      float defl = tableDefl(u, ud, e2, apsisDefl);
+      // minR ANALİTİK: içe giden ışının en yakın yaklaşımı apsistir, dışa
+      // gidenin ise başladığı yer. Marş bunu adım adım biriktiriyordu.
+      float minR = ud > 0.0 ? 1.0/uApsisT(e2) : r0;
+      bool march = defl < 0.0 || uJetA.x*uRealism > 0.0;
+      // MUHAFAZAKÂR ATLAMA TESTİ — asla yanlış atlamaz (ölçüldü: üç kamera
+      // konumunda 8192'şer piksel, sıfır yanlış). Yalnız KESİN büyüklükler:
+      //   • minR bandın dışındaysa ışın diske hiç yaklaşamaz;
+      //   • ışın toplam ψ_max = δ + Δ_kalan sahne açısı süpürür (kaçış yönünün
+      //     ta kendisi), disk düzlemini ise ancak ψ = α'da keser. α ≥ ψ_max ise
+      //     ışın oraya varmadan kaçar: kesişim YOKTUR.
+      // Bruneton'un kendi iki-görüntü şeması (mod π + apsis yansıması) burada
+      // KULLANILAMAZ: o, kameranın diskin DIŞINDA olduğunu varsayıyor; bizim
+      // kamera r≈13.4, disk dış yarıçapı 13.5 — tam kenarında. Denendi, diskin
+      // dış kenarında iki simetrik siyah kama üretti (kesişimlerin %14'ü yanlış
+      // temsilciye düşüyor, bir kısmı da φ_ub tablo sınırının dışında kalıyor).
+      if(!march && minR <= R_OUT + 0.5){
+        vec3 td = cross(vec3(0., 1., 0.), ez);
+        float tdl = length(td);
+        if(tdl > 1e-5){                       // düzlemler paralel değilse
+          td /= tdl;
+          if(dot(td, ey) < 0.0) td = -td;
+          float alpha = acos(clamp(dot(pr, td), -1.0, 1.0));
+          // Işın düzlemi ile disk düzlemi bir DOĞRU boyunca kesişir: geçişler
+          // ψ = α + kπ (k ≥ 0) açılarında olur, α = acos(...) ∈ [0, π]. Güçlü
+          // bükülen ışında ψ_max = δ + Δ rahatlıkla π'yi aşar, yani ikinci geçiş
+          // (k = 1) da aralığa girebilir. TEK KARŞILAŞTIRMA YETER: α + π < ψ_max
+          // ise zorunlu olarak α < ψ_max'tır (π > 0), yani ikinci geçişi olan her
+          // ışın ZATEN bu testten marşa düşer. Tersi de geçerli — α ≥ ψ_max ise
+          // tüm k'lar için α + kπ ≥ ψ_max, hiç geçiş yoktur. Ayrıca sınandı:
+          // 4 kamera konumu × 16200 ışın (foton halkası çevresi yoğun örneklendi),
+          // 7248'inde ikinci geçiş aralıkta; "k=0,1'i ayrı ayrı sına" varyantıyla
+          // FARKLI karar veren ışın sayısı 0, yanlış atlanan 0.
+          if(alpha < delta + defl) march = true;
+        }
+      }
+      if(!march){
+        float dp = delta + defl;
+        vec3 dEsc = cos(dp)*pr + sin(dp)*ey;
+        vec3 col = stars(dEsc)*mix(1.0, 0.12, uRealism);
+        col += mix(vec3(1.,.5,.24), vec3(.75,.85,1.15), uRealism)
+             * mix(0.05, 0.03, uRealism) * exp(-pow((minR-2.75)*1.15,2.));
+        col += mix(vec3(1.05,.92,.75), vec3(.9,.95,1.2), uRealism)
+             * mix(0.5, 0.10, uRealism) * exp(-pow((minR-1.55)*mix(5.5, 9.0, uRealism),2.));
+        gl_FragColor = vec4(outColor(col, ndc), 1.);
+        return;
+      }
+    }
+  }
   // Uzak ışınlar (etki parametresi > 17 rs) az bükülür: analitik düz
   // yol — aynı görüntü, maliyetin küçük bir kısmı; uzaklaşınca GPU yükü sabit
   if(h2 > 289.0){
@@ -542,6 +679,8 @@ export type LensUniforms = {
   uProjInv: THREE.IUniform<THREE.Matrix4>
   uEsc: THREE.IUniform<number>
   uSteps: THREE.IUniform<number>
+  uDeflTex: THREE.IUniform<THREE.Texture | null>
+  uTables: THREE.IUniform<number>
   uDiskIn: THREE.IUniform<number>
   uEff: THREE.IUniform<number>
   uRealism: THREE.IUniform<number>
@@ -569,6 +708,8 @@ export function createLensUniforms(): LensUniforms {
     uProjInv: { value: new THREE.Matrix4() },
     uEsc: { value: 44 },
     uSteps: { value: 150 },
+    uDeflTex: { value: null },
+    uTables: { value: 1 },
     uDiskIn: { value: 2.35 },
     uEff: { value: 0.06 },
     uRealism: { value: 0 },
