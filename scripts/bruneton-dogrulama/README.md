@@ -86,5 +86,16 @@ Bağımsız RK4'e karşı fark ≤ 0.08 mrad.
 | 𝕌 pişirme süresi | 124 ms (64×32, Euler) | **26 ms** (128×64, RK4) |
 
 Tarayıcı ölçümü (M1 Pro, 'yüksek', 2.89 Mpix, bloom açık, zaman dondurulmuş,
-aynı kamera; marş referansı iki koşumda %1 içinde eşleşiyor):
-**11.55 ms → 8.55 ms (1.35×)**; aynı karede tam marş 30.85 ms.
+aynı kamera): **11.55 ms → 7.9 ms (1.46×)**; aynı karede tam marş 30.85 ms.
+
+> **DÜZELTME (2026-09-02).** Burada önce "8.55 ms (1.35×)" yazıyordu; o sayı
+> GEÇERSİZ. `?fps=120` kare tavanı 8.33 ms'lik bir yuva demektir ve B3 o
+> yuvanın altına indiği için ölçüm vsync'e çarpmıştı — GPU değil tavan
+> ölçülmüştü. (B2'nin 11.55 ms'i yuvanın üstünde olduğu için geçerli;
+> "marş referansı iki koşumda %1 içinde eşleşiyor" metodolojisi de geçerli,
+> ama kırpılmış bir sayıya uygulanınca ona sahte güvenilirlik veriyordu.)
+> Doğrusu, yükü tavanın üstüne çıkarıp (dpr 2.0–3.2) alınan ölçek eğrisinden:
+> **kare ≈ 2.2 ms + 1.97 ms × Mpix** — 4.86 Mpix 11.8 ms · 8.20 Mpix 18.4 ms ·
+> 12.43 Mpix 26.7 ms. Bu model 2.89 Mpix'te 7.9 ms, 1080p'de (2.07 Mpix)
+> 6.3 ms verir. **Ders:** hızlandıkça FPS körleşir — bir kademeyi ölçmeden
+> önce yükün kare tavanının ÜSTÜNDE olduğunu doğrula.
