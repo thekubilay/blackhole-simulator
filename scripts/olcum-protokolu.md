@@ -14,7 +14,17 @@ oysa 120 Hz yuvası 8.33 ms idi. Gerçek maliyet 7.9 ms'ti ve kazanç 1.35× de�
 1.46×. Aynı gün ikinci kez: bütçe kalemleri tek tek kapatıldı ve **hepsi 8.3 ms
 çıktı** — çünkü hepsi tavanın altındaydı, hiçbir şey ölçülmüyordu.
 
+**Üçüncü kez (2026-09-02 akşam, bu sefer yakalandı):** taban probe'u (10, shader
+siyah yazar) 8.3 Mpix'te **8.3 ms** verdi — yine tavan. Shader ALU'su gidince
+kare tavanın altına düşer; **taban ölçümü için dpr ≥ 3.2 (bloom açık), bloom
+kapalıyken ≥ 4.8 gerekir.** Sayı tavana eşitse (8.3) ölçüm YOKTUR.
+
 **Kural:** ölçmeden önce yükü tavanın ÜSTÜNE çıkar ve çıktığını DOĞRULA.
+
+**Isıl kayma (2026-09-02):** 19.7 Mpix'te tam yük referansı 10 dakikada
+43 → 58 ms'ye tırmandı. Ağır yükte referansı her 3-4 probe'da bir yeniden al,
+A/B'yi dönüşümlü ölç (A, B, A, B), payları aynı pencerenin referansına böl.
+Düşük güçlü ölçümler (taban) daha az kayar ama onları da dönüşümlü al.
 
 ```js
 __bloom.renderer.setPixelRatio(2.6)   // 8.2 Mpix ≈ 18 ms — 8.33'ün rahatça üstü
@@ -63,7 +73,8 @@ referans %1 içinde eşleşince karşılaştırma güvenilir sayıldı.
 |---|---|
 | `__lens.b2 = 0 / 1` | tablo yolu ↔ tam marş, AYNI karede (sayfa yenilemesi gerekmez) |
 | `__lens.time = <sayı>` | diski dondurur |
-| `__lens.probe = 1..4` | bütçe kalemlerini tek tek kapatır (aşağıda) |
+| `__lens.probe = 1..10` | bütçe kalemlerini tek tek kapatır (aşağıda) |
+| `?aa=0` (URL) | tuvalin 4× MSAA'sı kapalı — bağlam özniteliği, yalnız yüklenişte |
 | `__lens.uniforms` | canlı uniform nesnesi |
 | `__bloom` | renderer, HDR hedefi, `setEnabled(false)` ile bloom payı |
 | `__lab` | timeScale / simTime (salt okunur anlık görüntü) |
@@ -82,6 +93,49 @@ shader'ında karşılıkları yoktur (paket kontrol edildi: GLSL'de `uProbe` yok
 | 2 | atmosfer örnekleri hiç alınmaz |
 | 3 | yıldız + bulutsu fonu siyah |
 | 4 | üçü birden |
+| 5 | 𝔻/𝕌 tablo aramaları: fetch2 4 bilineer tap yerine TEK nearest tap (sabit döndürülemez, sahne dalları değişir) |
+| 6 | sampleDisk'in relativistik gölgeleme zinciri (β→γ→dop→gfac→shift→boost→ramp) sabit renge, 1×/kesişim |
+| 7 | B2 kesişim döngüsü (k) hiç dönmez — 𝕌 + trig + disk + atmo birden |
+| 8 | B2 çıkış kompoziti: iki halo exp'i + outColor atlanır |
+| 9 | sampleAtmo'nun gölgeleme zinciri sabit renge, 4×/kesişim (6 + 9 = 5× toplam) |
+| 10 | main'in ilk satırında siyah: TABAN (quad + HDR hedefi + bloom + MSAA + tuval; shader ALU'su sıfır) |
+
+**%45'lik "kalan"ın ayrıştırılması (2026-09-02, M1 Pro, 8.31 Mpix, ref ≈ 19.5 ms;
+paylar aynı pencerenin referansına göre):**
+
+| kalem | ms | pay | nasıl ölçüldü |
+|---|---|---|---|
+| disk gürültüsü (fbm) | 3.75 | %19 | probe 1 |
+| atmosfer — toplam | 3.75 | %19 | probe 2 |
+| ↳ gölgeleme zinciri 4× | 1.55 | %8 | probe 9 |
+| ↳ gürültü + geometri | 2.2 | %11 | 2 − 9 |
+| bloom (HDR yolu) | 3.1 | %16 | `setEnabled(false)`, 0.37 ms/Mpix |
+| piksel başı kurulum + tablo ALU (acos/tan/asin/log, 2× tableRaw, phiC…) | ~2.5 | %13 | kalan |
+| **MSAA 4× tuval** | **~2.2** | **%11** | `?aa=0`, taban 19.7 Mpix'te 14.6 → ≤8.4 (0.27 ms/Mpix) |
+| sabit taban (çözünürlükten bağımsız) | ~2.0 | %10 | taban doğrusunun kesim noktası |
+| yıldız + bulutsu | 1.05 | %5 | probe 3 |
+| B2 döngü yükü + disk emisyon matematiği | ~0.7 | %4 | 7 − 1 − 2 − 6 |
+| disk gölgeleme zinciri 1× | 0.45 | %2 | probe 6 |
+| tablo tap'leri, kompozit/halo | ~0 | %0 | probe 5, probe 8 |
+
+Okuma:
+- **Tablolar bedava.** fetch2'nin 3 tap'i + mix'i gidince kare değişmiyor
+  (shader ALU-bağlı; 512² doku önbellekte). Tablo yolunu daha da ucuzlatmaya
+  çalışma.
+- **Gölgeleme zincirinin 5× tekrarı toplam 2.0 ms (%10)**; kesişim başına bir
+  kez hesaplansa en fazla 1.6 ms (%8) — 1080p'de 0.4 ms. Beklenenden küçük,
+  ve atmosfer örnekleri farklı yarıçapta (grazing ışında birbirinden 1-3
+  birim uzak) — "birebir aynı" değil, görsel A/B şart.
+- **MSAA yalnız gemi kenarlarına hizmet ediyor** (lens tam ekran quad, MSAA
+  shader aliasing'ine dokunmaz). Maliyet gemi geçişinde DEĞİL, tamponun
+  kendisinde: gemi geçişi atlanınca taban değişmiyor (14.6/15.2 vs 16.2/16.3,
+  dönüşümlü), MSAA'sız gemi geçişi ölçülemeyecek kadar küçük (p0 42.1 = 42.1).
+- **Taban doğruları** (bloom açık, MSAA açık): `1.7 ms + 0.64 ms/Mpix`
+  (12.58 → 9.7, 19.66 → 14.6, 28.31 → 19.7). Bloom kapalı: `2.0 + 0.26/Mpix`
+  (28.31 → 9.5, 33.23 → 10.8). MSAA ≈ bloom dışı piksel-başı tabanın tamamı.
+- **1080p (2.07 Mpix) projeksiyonu:** lens ALU 3.0 · sabit 2.0 · bloom 0.8 ·
+  MSAA 0.55 → 6.35 ms (model 6.3 ✓). Sabit 2.0 ms 1080p'de İKİNCİ büyük kalem
+  ve muhtemelen CPU (React/R3F/sim/HUD kare işi) — henüz ayrıştırılmadı.
 
 **Kayıtlı taban (M1 Pro, 'yüksek', 8.2 Mpix, bloom açık, zaman dondurulmuş):**
 

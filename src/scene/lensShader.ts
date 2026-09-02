@@ -20,7 +20,28 @@ void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }
  *   4 = üçü birden
  * Ölçülen paylar (M1 Pro, 8.2 Mpix, 'yüksek', toplam 18.4 ms): gürültü 2.9,
  * atmosfer 3.1, yıldız 0.9 — tek tek toplamları birlikte ölçümüne EŞİT
- * (6.9), yani kalemler bağımsız. Geri kalan 8.3 ms (%45) HENÜZ AYRIŞTIRILMADI.
+ * (6.9), yani kalemler bağımsız. Geri kalan 8.3 ms (%45) şu probe'larla
+ * ayrıştırılır (2026-09-02):
+ *   5 = 𝔻/𝕌 tablo aramaları: fetch2 bilineer 4 tap yerine TEK nearest tap
+ *       (sabit döndürülemez — sahne dalları değişir, başka bir sahne ölçülür;
+ *       tek tap değerleri ~aynı tutar, dal yapısı korunur. Ölçülen = 3 tap +
+ *       mix ALU'su ≈ toplam tap maliyetinin 3/4'ü; ×4/3 ile tahmin et)
+ *   6 = sampleDisk'in relativistik gölgeleme zinciri (td → β → γ → dop → gfac
+ *       → shift → boost → diskRamp/bbRamp → c) sabit renge — 1× / kesişim
+ *   7 = B2 kesişim döngüsü (k) hiç dönmez: 𝕌 aramaları + trig + disk + atmo
+ *       birden gider (yan etki: opak diskin arkasındaki yıldızlar hesaplanır)
+ *   8 = B2 çıkış kompoziti: iki halo exp'i + outColor atlanır
+ *   9 = sampleAtmo'nun gölgeleme zinciri sabit renge — 4× / kesişim
+ *       (probe 2'nin %17'sinin içindeki pay; 6 + 9 = zincirin 5× toplamı)
+ *  10 = main'in ilk satırında siyah yaz: geçişin TABAN maliyeti (tam ekran
+ *       quad + HDR hedefi + bloom hattı + MSAA tuval; shader ALU'su koşmaz).
+ *       DİKKAT: 8.3 Mpix'te tavana çarpar (8.3 ms = ?fps=120 yuvası); taban
+ *       için dpr ≥ 3.2 gerekir.
+ * ÖLÇÜLDÜ (2026-09-02, 8.31 Mpix, ref ≈ 19.5): 5 ≈ 0 (tap'ler bedava, shader
+ * ALU-bağlı) · 6 = 0.45 · 9 = 1.55 (5× zincir toplam 2.0 ms, %10) · 7 = 8.65
+ * (= 1 + 2 + 6 + ~0.7 döngü yükü) · 8 ≈ 0 · taban 1.7 ms + 0.64 ms/Mpix, bunun
+ * 0.27 ms/Mpix'i tuvalin 4× MSAA'sı (`?aa=0` ile A/B). Tam tablo ve yorum:
+ * scripts/olcum-protokolu.md §6.
  *
  * YENİ PROBE EKLERKEN: aşağıya bir sabit daha ekle ve shader'da tek satırlık
  * `${...}` olarak enjekte et. Uniform dallanması olduğu için iki dal da
@@ -36,6 +57,15 @@ const P_NOISE_OPEN = PROBE ? 'if(uProbe == 1.0 || uProbe == 4.0){ n = 0.5; } els
 const P_NOISE_CLOSE = PROBE ? '}' : ''
 const P_ATMO = PROBE ? 'if(uProbe == 2.0 || uProbe == 4.0) return;' : ''
 const P_STARS = PROBE ? 'if(uProbe == 3.0 || uProbe == 4.0) return vec3(0.);' : ''
+const P_TABLE = PROBE
+  ? 'if(uProbe == 5.0){ vec2 c1 = (clamp(floor(tc*sz), vec2(0.), sz - 1.0) + 0.5)/sz; return texture2D(t, c1).rg; }'
+  : ''
+const P_SHADE_DISK = PROBE ? 'if(uProbe == 6.0){ c = vec3(1.0, .55, .2); } else {' : ''
+const P_SHADE_ATMO = PROBE ? 'if(uProbe == 9.0){ c = vec3(1.0, .55, .2); boost = 1.0; } else {' : ''
+const P_SHADE_CLOSE = PROBE ? '}' : ''
+const P_LOOP = PROBE ? 'if(uProbe == 7.0) break;' : ''
+const P_COMP = PROBE ? 'if(uProbe == 8.0){ gl_FragColor = vec4(col2, 1.); return; }' : ''
+const P_BLACK = PROBE ? 'if(uProbe == 10.0){ gl_FragColor = vec4(0., 0., 0., 1.); return; }' : ''
 
 export const LENS_FRAGMENT = /* glsl */ `
 precision highp float;
@@ -240,6 +270,8 @@ void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
   E *= (0.85 + 2.2*uEff);
   // gözlenmiş karakter: Eddington oranı, limit-cycle, sıcak nokta lekeleri
   E *= uDiskGlow * diskFlicker(rr) * diskPatchF(hp.xz, rr, n);
+  vec3 c;
+  ${P_SHADE_DISK}
   vec3 td = normalize(vec3(-hp.z, 0., hp.x));
   // yerel statik gözlemcinin ölçtüğü dairesel yörünge hızı — Newton'un
   // √(M/r)'si DEĞİL: v = √(M/r)/√(1−rs/r); ISCO'da (3 rs) tam c/2.
@@ -273,7 +305,8 @@ void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
   // renk kalibrasyonu korunur, yalnız iç kenar sönükleşir.
   float xIn = uDiskIn/max(rr, uDiskIn);
   float tRel = 2.77 * pow(xIn, 0.75) * pow(max(1.-sqrt(xIn), 0.), 0.25) * shift;
-  vec3 c = mix(cA, bbRamp(tRel), uRealism);
+  c = mix(cA, bbRamp(tRel), uRealism);
+  ${P_SHADE_CLOSE}
   // hacim ağırlığı: Gauss yoğunluk × (yol/kalınlık); 0.5 = dik geçişin
   // toplamı eski tek-örnek pozlamayla eşleşir (Σwv ≈ 1)
   float wv = gz * (dsl/H) * 0.5;
@@ -300,6 +333,8 @@ void sampleAtmo(vec3 hp, vec3 vn, float H, float ds, inout vec4 acc){
   float lump = vnoise(q*1.4);
   float fade = smoothstep(uDiskIn, uDiskIn+0.5, rr) * pow(smoothstep(R_OUT, R_OUT-6.5, rr), 2.3);
   float D = fade * (0.25 + 0.75*lump*lump) * pow(uDiskIn/rr, 2.6);
+  vec3 c; float boost;
+  ${P_SHADE_ATMO}
   vec3 td = normalize(vec3(-hp.z, 0., hp.x));
   // yerel statik gözlemcinin ölçtüğü dairesel yörünge hızı — Newton'un
   // √(M/r)'si DEĞİL: v = √(M/r)/√(1−rs/r); ISCO'da (3 rs) tam c/2.
@@ -311,11 +346,12 @@ void sampleAtmo(vec3 hp, vec3 vn, float H, float ds, inout vec4 acc){
   float dop = 1./(gamma*(1.+beta*dot(td,vn)));
   float gfac = sqrt(max(1.-1./rr, 0.03));
   // sanatsal kaymasız (bkz. sampleDisk), gerçekçi g⁴
-  float boost = mix(1.0, 0.16*(2.35/uDiskIn)*pow(dop*gfac,4.0), uRealism);
+  boost = mix(1.0, 0.16*(2.35/uDiskIn)*pow(dop*gfac,4.0), uRealism);
   // aynı Novikov–Thorne sıcaklık profili (bkz. sampleDisk)
   float xIn = uDiskIn/max(rr, uDiskIn);
   float tRel = 2.77 * pow(xIn, 0.75) * pow(max(1.-sqrt(xIn), 0.), 0.25) * dop * gfac;
-  vec3 c = mix(diskRamp(rr), bbRamp(tRel), uRealism);
+  c = mix(diskRamp(rr), bbRamp(tRel), uRealism);
+  ${P_SHADE_CLOSE}
   float E = D * gz * (ds/H) * 0.5 * boost * (0.85 + 2.2*uEff);
   E *= uDiskGlow * diskFlicker(rr) * diskPatchF(hp.xz, rr, lump);
   acc.rgb += (1.-acc.a)*c*E;
@@ -414,6 +450,7 @@ float texco(float x, float n){ return 0.5/n + x*(1.0 - 1.0/n); }
 // yapılır: dokular NEAREST bağlanır, dört komşunun TEKSEL MERKEZİ örneklenir.
 // Aritmetik, doğrulama koşumundaki sample2() ile birebir aynıdır.
 vec2 fetch2(sampler2D t, vec2 sz, vec2 tc){
+  ${P_TABLE}
   vec2 f = tc*sz - 0.5;
   vec2 i = floor(f), w = f - i;
   vec2 c0 = (clamp(i,       vec2(0.), sz - 1.0) + 0.5)/sz;
@@ -480,6 +517,7 @@ float tableDefl(float u, float ud, float e2, float dtu, out float apsisDefl){
   return d;
 }
 void main(){
+  ${P_BLACK}
   vec2 ndc = vUv*2.-1.;
   vec4 vp = uProjInv*vec4(ndc,-1.,1.); vp/=vp.w;
   vec3 rd = normalize((uCamMat*vec4(vp.xyz,0.)).xyz);
@@ -621,6 +659,7 @@ void main(){
           // bırakır. Bu artık YALNIZ kapaklanan sütunlarda (e² KMU'ya 1e-5
           // kadar yakın) olabilir — ölçümde sıfır piksel.
           for(int k = 0; k < 6; k++){
+            ${P_LOOP}
             float psi = alpha2 + float(k)*PI_;
             if(psi >= psiMax) break;
             float phi = phiC + sgnPhi*psi;
@@ -677,6 +716,7 @@ void main(){
           bg2 = stars(cos(dp2)*pr + sin(dp2)*ey)*mix(1.0, 0.12, uRealism);
         }
         vec3 col2 = acc.rgb + (1.0 - acc.a)*bg2;
+        ${P_COMP}
         if(esc){
           col2 += mix(vec3(1.,.5,.24), vec3(.75,.85,1.15), uRealism)
                 * mix(0.05, 0.03, uRealism) * exp(-pow((minR2-2.75)*1.15,2.));

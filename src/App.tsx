@@ -66,13 +66,18 @@ export default function App() {
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır
   const gameActive = useGameSnapshot(game).active
+  // ?aa=0 → tuvalin 4× MSAA'sı kapalı (ölçüm pini). Bağlam özniteliği olduğu
+  // için çalışma anında değişmez; yalnız sayfa yüklenirken okunur. 2026-09-02
+  // ölçümü: MSAA'nın payı bloom dışı taban maliyetinin içinde — bkz.
+  // scripts/olcum-protokolu.md §6.
+  const aa = new URLSearchParams(window.location.search).get('aa') !== '0'
   return (
     <>
       <Canvas
         style={{ position: 'fixed', inset: 0, cursor: 'crosshair' }}
         flat
         frameloop="never"
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        gl={{ antialias: aa, powerPreference: 'high-performance' }}
         camera={{ fov: 55, near: 0.05, far: 300, position: [2.2, 1.15, 13.2] }}
       >
         <FrameLoopDriver controller={controller} />
