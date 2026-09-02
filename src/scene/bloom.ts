@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { DISPLAY_TRANSFORM_GLSL } from './displayTransform'
+import { PARTICLE_LAYER, ShipPass } from './shipPass'
 
 /**
  * BLOOM HATTI (SRP: tek iş — HDR lens çıkışından parlama üretip ekrana bas).
@@ -205,11 +206,16 @@ export class BloomPipeline {
   private readonly quad: THREE.Mesh
   private readonly quadScene: THREE.Scene
   private readonly quadCamera: THREE.Camera
+  /** Gemi geçişi: kırpılmış 4× MSAA hedef (bkz. shipPass.ts). */
+  private readonly ship: ShipPass
+  /** false → gemi eski yolla doğrudan tuvale (`?gemiaa=0`, görsel/maliyet A/B) */
+  private shipMsaa = true
 
   constructor(renderer: THREE.WebGLRenderer, params: BloomParams = DEFAULT_BLOOM) {
     this.renderer = renderer
     this.params = params
     this.hdr = makeTarget(1, 1)
+    this.ship = new ShipPass(renderer)
 
     const mk = (fragmentShader: string, uniforms: Record<string, THREE.IUniform>) =>
       new THREE.ShaderMaterial({
@@ -287,6 +293,11 @@ export class BloomPipeline {
   /** Kalite kademesi ya da ?fon= pini çağırır; kare sonunda işlenir. */
   setLensScale(scale: number): void {
     this.wantedScale = Math.min(Math.max(scale, 0.3), 1)
+  }
+
+  /** `?gemiaa=0` pini: gemi kırpılmış MSAA hedefi yerine doğrudan tuvale. Anında. */
+  setShipMsaa(on: boolean): void {
+    this.shipMsaa = on
   }
 
   /** Kare sonu: istenen yol ile çizilen yolu eşitle. */
@@ -376,6 +387,8 @@ export class BloomPipeline {
     if (!this.usesTarget) {
       const prevAutoClear = renderer.autoClear
       camera.layers.set(0)
+      // parçacıklar gemi geçişi tarafından ayrı katmana alınmış olabilir
+      camera.layers.enable(PARTICLE_LAYER)
       renderer.setRenderTarget(null)
       renderer.autoClear = true
       renderer.render(scene, camera)
@@ -431,16 +444,26 @@ export class BloomPipeline {
     this.draw(this.composite, null, true)
 
     // 6) Sahnenin geri kalanı (gemi, parçacıklar) birleştirmenin ÜSTÜNE.
-    //    Derinlik 5. adımda temizlendi, renk korunur.
-    camera.layers.set(0)
-    renderer.autoClear = false
-    renderer.render(scene, camera)
+    //    Derinlik 5. adımda temizlendi, renk korunur. Tuval MSAA'sız (App.tsx
+    //    `antialias: false`): gemi kenar yumuşatmasını kırpılmış MSAA hedef
+    //    verir (shipPass.ts) — tam ekran MSAA'nın 0.27 ms/Mpix'i kalktı.
+    const persp = camera as THREE.PerspectiveCamera
+    if (this.shipMsaa && persp.isPerspectiveCamera) {
+      this.ship.render(scene, persp, size.x, size.y)
+    } else {
+      camera.layers.set(0)
+      camera.layers.enable(PARTICLE_LAYER)
+      renderer.setRenderTarget(null)
+      renderer.autoClear = false
+      renderer.render(scene, camera)
+    }
 
     renderer.autoClear = prevAutoClear
     this.commit()
   }
 
   dispose(): void {
+    this.ship.dispose()
     this.hdr.dispose()
     for (const m of this.mips) m.dispose()
     this.mips = []

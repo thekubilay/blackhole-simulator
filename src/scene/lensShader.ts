@@ -40,8 +40,9 @@ void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }
  * ÖLÇÜLDÜ (2026-09-02, 8.31 Mpix, ref ≈ 19.5): 5 ≈ 0 (tap'ler bedava, shader
  * ALU-bağlı) · 6 = 0.45 · 9 = 1.55 (5× zincir toplam 2.0 ms, %10) · 7 = 8.65
  * (= 1 + 2 + 6 + ~0.7 döngü yükü) · 8 ≈ 0 · taban 1.7 ms + 0.64 ms/Mpix, bunun
- * 0.27 ms/Mpix'i tuvalin 4× MSAA'sı (`?aa=0` ile A/B). Tam tablo ve yorum:
- * scripts/olcum-protokolu.md §6.
+ * 0.27 ms/Mpix'i tuvalin 4× MSAA'sıydı — kaldırıldı, gemi kırpılmış MSAA
+ * hedefe çiziliyor (shipPass.ts; `?aa=1` eski tuval MSAA'sı ile A/B). Tam
+ * tablo ve yorum: scripts/olcum-protokolu.md §6.
  *
  * YENİ PROBE EKLERKEN: aşağıya bir sabit daha ekle ve shader'da tek satırlık
  * `${...}` olarak enjekte et. Uniform dallanması olduğu için iki dal da

@@ -27,7 +27,7 @@ import { useGameSnapshot } from './hooks/useGameSnapshot'
 export default function App() {
   const coarsePointer = useMedia('(pointer: coarse)')
   // deps boş: simülasyon bir kez kurulur, kuruluştaki işaretçi türü kullanılır
-  const { controller, governor, game, bloomPin, tables, b2, lensScale } = useMemo(() => {
+  const { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa } = useMemo(() => {
     // ?kalite=yuksek|orta|dusuk|mobil → governor sabitlenir (test/ölçüm aracı)
     const ASCII: Record<string, string> = { yuksek: 'yüksek', dusuk: 'düşük' }
     const params = new URLSearchParams(window.location.search)
@@ -62,15 +62,18 @@ export default function App() {
     const fon = Number(fonRaw)
     const lensScale =
       fonRaw !== null && Number.isFinite(fon) && fon > 0 ? Math.min(Math.max(fon, 0.3), 1) : null
-    return { controller, governor, game, bloomPin, tables, b2, lensScale }
+    // Tuval MSAA'sı VARSAYILAN KAPALI: ölçüldü, 0.27 ms/Mpix (8.3 Mpix'te 2.2 ms,
+    // karenin %11'i) ve yalnız gemi kenarlarına hizmet ediyordu — lens tam ekran
+    // quad. Gemi kenar yumuşatmasını artık kırpılmış MSAA hedef verir
+    // (scene/shipPass.ts). ?aa=1 → eski tuval MSAA'sı (A/B); ?gemiaa=0 → gemi
+    // eski yolla doğrudan tuvale. İkisi birden = tam eski görüntü/maliyet.
+    // Bağlam özniteliği çalışma anında değişmez; yalnız yüklenişte okunur.
+    const aa = params.get('aa') === '1'
+    const shipMsaa = params.get('gemiaa') !== '0'
+    return { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa }
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır
   const gameActive = useGameSnapshot(game).active
-  // ?aa=0 → tuvalin 4× MSAA'sı kapalı (ölçüm pini). Bağlam özniteliği olduğu
-  // için çalışma anında değişmez; yalnız sayfa yüklenirken okunur. 2026-09-02
-  // ölçümü: MSAA'nın payı bloom dışı taban maliyetinin içinde — bkz.
-  // scripts/olcum-protokolu.md §6.
-  const aa = new URLSearchParams(window.location.search).get('aa') !== '0'
   return (
     <>
       <Canvas
@@ -100,7 +103,7 @@ export default function App() {
         <SimulationLayer controller={controller} />
         <SpawnPlane onSpawn={controller.spawnAt} />
         {/* En sonda: öncelikli useFrame ile kareyi devralır (bkz. PostFx) */}
-        <PostFx governor={governor} pin={bloomPin} lensScale={lensScale} />
+        <PostFx governor={governor} pin={bloomPin} lensScale={lensScale} shipMsaa={shipMsaa} />
       </Canvas>
       <Overlay controller={controller} game={game} />
       <RotateGate />

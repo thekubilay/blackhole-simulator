@@ -21,6 +21,20 @@ kapalıyken ≥ 4.8 gerekir.** Sayı tavana eşitse (8.3) ölçüm YOKTUR.
 
 **Kural:** ölçmeden önce yükü tavanın ÜSTÜNE çıkar ve çıktığını DOĞRULA.
 
+**Tavanı yazılımdan kaldırmak İŞE YARAMAZ (denendi, 2026-09-02):** FrameLoopDriver
+eşiği DEV pini ile kaldırıldı; 0.07 Mpix'te kare yine 8.3 ms. Playwright Chromium
+rAF'ı 120 Hz ritmine bağlı, gerçek ekranda ise vsync var. Tek yol yükü tavanın
+üstüne çıkarmak. Pin geri alındı.
+
+**Sabit ~2 ms'nin ne olduğu (2026-09-02):** taban doğrusunun kesim noktası
+(1.7-2.0 ms) ana iş parçacığı DEĞİL: rAF geri çağrılarının toplam CPU süresi
+kare başına 0.2 ms (rAF sarmalanarak ölçüldü). Bloom geçiş sayısı da kesim
+noktasını değiştirmiyor (bloom açık 1.7, kapalı 2.0). Kalan açıklama: sunum /
+kare zamanlama boşluğu (GPU takas sonrası bir sonraki komut gönderimine kadar
+boşta). Bu GPU-MEŞGUL değildir, fan hedefi (≤%60 doluluk) için sayılmaması
+gerekir — ama GPU zamanlayıcısı güvenilmez olduğundan (bkz. §8) kanıtlanamadı.
+Öncelik listesinden düşürüldü.
+
 **Isıl kayma (2026-09-02):** 19.7 Mpix'te tam yük referansı 10 dakikada
 43 → 58 ms'ye tırmandı. Ağır yükte referansı her 3-4 probe'da bir yeniden al,
 A/B'yi dönüşümlü ölç (A, B, A, B), payları aynı pencerenin referansına böl.
@@ -74,7 +88,8 @@ referans %1 içinde eşleşince karşılaştırma güvenilir sayıldı.
 | `__lens.b2 = 0 / 1` | tablo yolu ↔ tam marş, AYNI karede (sayfa yenilemesi gerekmez) |
 | `__lens.time = <sayı>` | diski dondurur |
 | `__lens.probe = 1..10` | bütçe kalemlerini tek tek kapatır (aşağıda) |
-| `?aa=0` (URL) | tuvalin 4× MSAA'sı kapalı — bağlam özniteliği, yalnız yüklenişte |
+| `?aa=1` (URL) | tuvalin 4× MSAA'sı AÇIK (eski yol; varsayılan kapalı) — bağlam özniteliği, yalnız yüklenişte |
+| `?gemiaa=0` (URL) | gemi kırpılmış MSAA hedefi yerine doğrudan tuvale (eski yol); `__bloom.setShipMsaa(0/1)` aynı karede |
 | `__lens.uniforms` | canlı uniform nesnesi |
 | `__bloom` | renderer, HDR hedefi, `setEnabled(false)` ile bloom payı |
 | `__lab` | timeScale / simTime (salt okunur anlık görüntü) |
@@ -134,8 +149,20 @@ Okuma:
   (12.58 → 9.7, 19.66 → 14.6, 28.31 → 19.7). Bloom kapalı: `2.0 + 0.26/Mpix`
   (28.31 → 9.5, 33.23 → 10.8). MSAA ≈ bloom dışı piksel-başı tabanın tamamı.
 - **1080p (2.07 Mpix) projeksiyonu:** lens ALU 3.0 · sabit 2.0 · bloom 0.8 ·
-  MSAA 0.55 → 6.35 ms (model 6.3 ✓). Sabit 2.0 ms 1080p'de İKİNCİ büyük kalem
-  ve muhtemelen CPU (React/R3F/sim/HUD kare işi) — henüz ayrıştırılmadı.
+  MSAA 0.55 → 6.35 ms (model 6.3 ✓). Sabit 2.0 ms: ana iş parçacığı değil
+  (rAF CPU 0.2 ms), büyük olasılıkla sunum/zamanlama boşluğu — bkz. §1.
+
+**MSAA ÇÖZÜMÜ UYGULANDI (2026-09-02, versions/v1.2.1):** tuval `antialias: false`;
+katman 0 geometrisi ekran kutusuna kırpılmış 4× MSAA hedefe çizilir
+(`src/scene/shipPass.ts`, `setViewOffset` + SRGB8_ALPHA8 + premultiplied kompozit);
+toplamalı parçacıklar ayrı katmanda tuvale, öncesinde yalnız-derinlik ön geçişi
+(örtme korunur). Ölçüm: taban 19.7 Mpix'te **14.6 → ≤ 8.4 ms** (tavan; MSAA'sız
+tuvalla aynı). Gemi uzakken hedef 256×192 @ 18 Mpix, taban farkı ölçülemedi
+(8.3-8.5, tavanda). Görsel (`?oyun=temas`, 60 px'lik gemi, farklı anlar):
+gemi piksellerinin ortalama rengi eski (196,163,112) → yeni (198,166,113), %1
+içinde; silüet kenar adımı eski 120 → yeni 125 (eşit yumuşaklık), AA'sız 174.
+Gemi kadrajı doldurunca hedef tuval boyutuna çıkar: eski maliyet, kötüleşme yok.
+`?aa=1&gemiaa=0` = tam eski görüntü ve maliyet (A/B için).
 
 **Kayıtlı taban (M1 Pro, 'yüksek', 8.2 Mpix, bloom açık, zaman dondurulmuş):**
 

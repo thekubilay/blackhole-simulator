@@ -21,12 +21,15 @@ function BloomDriver({
   governor,
   pin,
   lensScale,
+  shipMsaa,
 }: {
   governor: QualityGovernor
   pin: boolean | null
   lensScale: number | null
+  shipMsaa: boolean
 }) {
   const pipeline = useThree((s) => getBloomPipeline(s.gl))
+  useEffect(() => pipeline.setShipMsaa(shipMsaa), [pipeline, shipMsaa])
   // Parlama ve katmanlı render ölçeğinin ikisi de kalite kademesinden gelir;
   // pinler (?bloom=, ?fon=) kademe kararını ezer. Hat bu isteklerin ikisini de
   // kare SONUNDA işler (BloomPipeline.commit) — geçiş karesinde lens'in
@@ -53,12 +56,17 @@ export function PostFx({
   governor,
   pin,
   lensScale,
+  shipMsaa,
 }: {
   governor: QualityGovernor
   pin: boolean | null
   /** ?fon= pini; null ise kalite kademesinin lensScale'i kullanılır */
   lensScale: number | null
+  /** ?gemiaa=0 → false: gemi doğrudan tuvale (eski yol, A/B) */
+  shipMsaa: boolean
 }) {
   const enabled = useThree((s) => supportsHdrPost(s.gl))
-  return enabled ? <BloomDriver governor={governor} pin={pin} lensScale={lensScale} /> : null
+  return enabled ? (
+    <BloomDriver governor={governor} pin={pin} lensScale={lensScale} shipMsaa={shipMsaa} />
+  ) : null
 }
