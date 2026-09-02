@@ -2,8 +2,10 @@ import { useEffect, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { QualityGovernor } from '../sim/QualityGovernor'
+import type { PowerPolicy } from '../sim/PowerPolicy'
 import { getBloomPipeline, supportsHdrPost } from './bloom'
 import { BudgetProbe } from './budgetProbe'
+import { classifyDevice, rendererString, watchBattery, watchPressure } from './powerSensors'
 
 /**
  * Bloom hattını süren sürücü. `useFrame`'e 1 önceliği verilmesi R3F'in
@@ -24,23 +26,46 @@ function BloomDriver({
   pin,
   lensScale,
   shipMsaa,
-  budgetMs,
+  power,
 }: {
   governor: QualityGovernor
   pin: boolean | null
   lensScale: number | null
   shipMsaa: boolean
-  budgetMs: number
+  power: PowerPolicy
 }) {
+  const gl = useThree((s) => s.gl)
   const pipeline = useThree((s) => getBloomPipeline(s.gl))
   useEffect(() => pipeline.setShipMsaa(shipMsaa), [pipeline, shipMsaa])
   // Açılış bütçe ölçümü: hattı birkaç karede k kez çizdirir, GPU-meşgul süreyi
   // eğimden alır, governor'a kalite TAVANINI koyar (bkz. budgetProbe.ts).
-  const probe = useMemo(() => new BudgetProbe(governor, budgetMs), [governor, budgetMs])
+  const probe = useMemo(() => new BudgetProbe(governor, power.budgetMs), [governor, power])
   useEffect(() => {
-    // DEV ölçüm kancası: `__butce.result`, `__butce.restart()`, `__butce.nudge`
-    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__butce = probe
-  }, [probe])
+    // Politika yığını: cihaz sınıfı → varsayılan güç modu; pil ve sistem basıncı
+    // sensörleri → politika; politika → probe (bütçe + basınç düşüşü). Bkz.
+    // sim/PowerPolicy.ts, scene/powerSensors.ts.
+    const { cls, mode } = classifyDevice(rendererString(gl), window.matchMedia('(pointer: coarse)').matches)
+    power.setDevice(cls, mode)
+    const apply = () => {
+      probe.setBudget(power.budgetMs)
+      probe.setExtraDrop(power.extraDrop)
+    }
+    apply()
+    const stopPolicy = power.onChange(apply)
+    const stopBattery = watchBattery(power)
+    const stopPressure = watchPressure(power)
+    if (import.meta.env.DEV) {
+      // ölçüm kancaları: `__butce.result/restart()`, `__guc.reportPressure('serious', t)`
+      const w = window as unknown as Record<string, unknown>
+      w.__butce = probe
+      w.__guc = power
+    }
+    return () => {
+      stopPolicy()
+      stopBattery()
+      stopPressure()
+    }
+  }, [gl, power, probe])
   const size = useMemo(() => new THREE.Vector2(), [])
   // Parlama ve katmanlı render ölçeğinin ikisi de kalite kademesinden gelir;
   // pinler (?bloom=, ?fon=) kademe kararını ezer. Hat bu isteklerin ikisini de
@@ -75,7 +100,7 @@ export function PostFx({
   pin,
   lensScale,
   shipMsaa,
-  budgetMs,
+  power,
 }: {
   governor: QualityGovernor
   pin: boolean | null
@@ -83,17 +108,11 @@ export function PostFx({
   lensScale: number | null
   /** ?gemiaa=0 → false: gemi doğrudan tuvale (eski yol, A/B) */
   shipMsaa: boolean
-  /** GPU-meşgul bütçesi (ms, 60 Hz); ?butce=<ms>, 0 = açılış ölçümü kapalı */
-  budgetMs: number
+  /** güç politikası: bütçe (ms) + basınç düşüşü; ?butce= pini içinde */
+  power: PowerPolicy
 }) {
   const enabled = useThree((s) => supportsHdrPost(s.gl))
   return enabled ? (
-    <BloomDriver
-      governor={governor}
-      pin={pin}
-      lensScale={lensScale}
-      shipMsaa={shipMsaa}
-      budgetMs={budgetMs}
-    />
+    <BloomDriver governor={governor} pin={pin} lensScale={lensScale} shipMsaa={shipMsaa} power={power} />
   ) : null
 }

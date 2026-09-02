@@ -1,5 +1,6 @@
 import type * as THREE from 'three'
 import type { QualityLevel } from './QualityGovernor'
+import type { PowerMode, PowerSnapshot } from './PowerPolicy'
 
 export type SpawnMode = 'orbit' | 'flyby' | 'fall'
 
@@ -67,6 +68,8 @@ export interface LabSnapshot {
   resetSeq: number
   /** kare tavanı: 60 (serin, varsayılan) | 120 (ProMotion akıcılığı) */
   fpsCap: 60 | 120
+  /** güç politikası: mod, cihaz sınıfı, bütçe, pil, sistem basıncı (bkz. PowerPolicy) */
+  power: PowerSnapshot
 }
 
 /** ISP: UI'nin komut tarafı — durum okumadan ayrı. */
@@ -88,6 +91,8 @@ export interface LabCommands {
   qualityOptions(): readonly QualityLevel[]
   /** kare tavanı: 60 = serin/sessiz, 120 = ProMotion ekranda akıcı */
   setFpsCap(cap: 60 | 120): void
+  /** güç modu (GPU-meşgul bütçesi); null = cihaz sınıfının varsayılanına dön */
+  setPowerMode(mode: PowerMode | null): void
 }
 
 /** ISP: UI'nin okuma tarafı — useSyncExternalStore sözleşmesi. */

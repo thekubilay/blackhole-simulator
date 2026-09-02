@@ -1,6 +1,14 @@
 import { useState, type ReactNode } from 'react'
 import type { LabCommands, LabSnapshot } from '../sim/types'
+import { DEVICE_LABEL, MODE_BUDGET_MS, MODE_LABEL, type PowerMode } from '../sim/PowerPolicy'
 import { Dialog } from './Dialog'
+
+const POWER_MODES: readonly PowerMode[] = ['sessiz', 'dengeli', 'performans']
+const POWER_DESC: Record<PowerMode, string> = {
+  sessiz: 'fan duyulmasın, pil dayansın',
+  dengeli: 'entegre GPU için varsayılan',
+  performans: 'ayrık GPU, tavan 60 fps',
+}
 // import { fmtBig } from './format' // KIZILA KAYMA / ZAMAN GEN. hücreleri yorumda
 
 type Pop = 'fps' | 'kalite' | 'spin' | null
@@ -80,6 +88,34 @@ export function HudStrip({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
               <button className={s.qualityAuto ? 'on' : ''} onClick={() => lab.setQuality(null)}>
                 otomatik — GPU bütçesi tavan, FPS güvenlik ağı
               </button>
+            </div>
+            <div className="lbl">GÜÇ MODU</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
+              {POWER_MODES.map((m) => (
+                <button
+                  key={m}
+                  className={!s.power.auto && s.power.mode === m ? 'on' : ''}
+                  disabled={s.power.override !== null}
+                  onClick={() => lab.setPowerMode(m)}
+                >
+                  {MODE_LABEL[m]} · {MODE_BUDGET_MS[m]} ms/kare · {POWER_DESC[m]}
+                </button>
+              ))}
+              <button
+                className={s.power.auto ? 'on' : ''}
+                disabled={s.power.override !== null}
+                onClick={() => lab.setPowerMode(null)}
+              >
+                otomatik — {DEVICE_LABEL[s.power.deviceClass]} → {MODE_LABEL[s.power.mode]}
+              </button>
+            </div>
+            <div className="body" style={{ marginTop: 8 }}>
+              GPU kare başına en çok <b>{s.power.budgetMs.toFixed(1)} ms</b> meşgul kalır
+              {s.power.onBattery ? ' (pilde, ×0.75)' : ''}
+              {s.power.pressure ? ` · sistem basıncı: ${s.power.pressure}` : ''}
+              {s.power.pressureDrop > 0 ? ` · basınç nedeniyle ${s.power.pressureDrop} kademe aşağı` : ''}
+              {s.power.override !== null ? ` · URL pini ?butce=${s.power.override}` : ''}. Tarayıcıda
+              fan ya da sıcaklık sensörü yoktur; fanı duyuyorsanız Sessiz'i seçin.
             </div>
           </div>
         </Dialog>

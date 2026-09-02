@@ -6,6 +6,7 @@ import { DEFAULT_PRESET_ID, PRESETS } from './physics/presets'
 import { BODY_REGISTRY } from './sim/bodies/registry'
 import { Simulation } from './sim/Simulation'
 import { QualityGovernor } from './sim/QualityGovernor'
+import { PowerPolicy } from './sim/PowerPolicy'
 import { LabController } from './sim/LabController'
 import { GameController } from './game/GameController'
 import { CameraRewind } from './scene/CameraRewind'
@@ -27,7 +28,7 @@ import { useGameSnapshot } from './hooks/useGameSnapshot'
 export default function App() {
   const coarsePointer = useMedia('(pointer: coarse)')
   // deps boş: simülasyon bir kez kurulur, kuruluştaki işaretçi türü kullanılır
-  const { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa, budgetMs } = useMemo(() => {
+  const { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa, power } = useMemo(() => {
     // ?kalite=yuksek|orta|dusuk|mobil → governor sabitlenir (test/ölçüm aracı)
     const ASCII: Record<string, string> = { yuksek: 'yüksek', dusuk: 'düşük' }
     const params = new URLSearchParams(window.location.search)
@@ -70,13 +71,15 @@ export default function App() {
     // Bağlam özniteliği çalışma anında değişmez; yalnız yüklenişte okunur.
     const aa = params.get('aa') === '1'
     const shipMsaa = params.get('gemiaa') !== '0'
-    // ?butce=<ms> → GPU-meşgul bütçesi (60 Hz'de kare başına, varsayılan 10 =
-    // ~%60 doluluk, fan sessiz). Açılışta ölçülür ve kalite TAVANI olur
-    // (scene/budgetProbe.ts). 0 = ölçüm kapalı, eski FPS-tek davranış (A/B).
-    // Sayı cihaza göre kalibre edilebilir: fan hâlâ dönüyorsa düşür.
+    // ?butce=<ms> → GPU-meşgul bütçesini PİNLER (ölçüm aracı; güç modu, pil ve
+    // basınç tepkisi devre dışı). 0 = açılış ölçümü kapalı, eski FPS-tek davranış.
+    // Pinsizken bütçeyi PowerPolicy verir: cihaz sınıfından varsayılan mod
+    // (sessiz 7 / dengeli 10 / performans 14 ms), pilde ×0.75, sistem basıncı
+    // (Compute Pressure) kademe düşürür; HUD'dan elle mod seçilir.
     const butceRaw = params.get('butce')
-    const budgetMs = butceRaw === null ? 10 : Math.max(0, Number(butceRaw) || 0)
-    return { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa, budgetMs }
+    const power = new PowerPolicy(butceRaw === null ? null : Math.max(0, Number(butceRaw) || 0))
+    controller.attachPower(power)
+    return { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa, power }
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır
   const gameActive = useGameSnapshot(game).active
@@ -114,7 +117,7 @@ export default function App() {
           pin={bloomPin}
           lensScale={lensScale}
           shipMsaa={shipMsaa}
-          budgetMs={budgetMs}
+          power={power}
         />
       </Canvas>
       <Overlay controller={controller} game={game} />

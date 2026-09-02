@@ -255,6 +255,26 @@ Tavan her koşumda 'yüksek' (≤ 10); kademe 'orta'dan 'yüksek'e ilk saniyede
 atlıyor (12 sn'lik FPS tırmanışı yerine). 120 Hz'de bütçe değişmez (bilinçli
 akıcılık tercihi, HUD söyler).
 
+**Bütçenin kaynağı — güç politikası yığını (2026-09-02, v1.2.1):** 10 sabit
+değil. `sim/PowerPolicy.ts` + `scene/powerSensors.ts`:
+
+| katman | sinyal | etkisi |
+|---|---|---|
+| cihaz sınıfı | renderer dizgisi (Chrome'da maskesiz) + kaba işaretçi | varsayılan mod: mobil → Sessiz 7 ms, entegre → Dengeli 10, ayrık GPU → Performans 14 |
+| kullanıcı | HUD KALİTE › GÜÇ MODU | modu ezer (tek gerçek fan sensörü kullanıcının kulağı) |
+| pil | Battery Status API (yalnız Chromium) | pilde bütçe ×0.75 |
+| sistem basıncı | Compute Pressure API (Chrome 125+, HTTPS, yalnız `cpu`) | eşik moda bağlı: Sessiz `fair`, Dengeli `serious`, Performans `critical`; durum 20 sn sürmeli, düşüşler arası 30 sn, en çok 2 kademe; 5 dk sakinlikte bir kademe geri |
+| pin | `?butce=<ms>` | hepsini ezer, sensör tepkisi kapalı (ölçüm aracı) |
+
+Bütçe değişince yeniden ÖLÇÜM yapılmaz: probe'un tahminleri durur, tavan
+yeniden seçilir (`setBudget`/`setExtraDrop`). Tarayıcı fanı, sıcaklığı ve gücü
+GÖREMEZ; `"thermals"` kaynağı spesifikasyonda var ama Chrome'da yok. Doğrulama
+(M1 Pro, "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro)"): sınıf entegre →
+Dengeli 10 → tavan yüksek; pil → 7.5; Sessiz → 7 (yüksek 5.28 sığar); Sessiz +
+25 sn `fair` → 1 kademe düşüş, HUD 'iyi'; `nominal` sonrası düşüş 5 dk korunur.
+DEV kancaları: `__guc` (politika), `__lab.power` (anlık görüntü), `__butce`.
+Mod kalıcı DEĞİL (projede localStorage deseni yok; her açılışta cihaz sınıfı).
+
 ## 8. Ayrıca
 
 ANGLE/Metal'in dört ölçüm tuzağı (timer query, finish, clientWaitSync, TBDR

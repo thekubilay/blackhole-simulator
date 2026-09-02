@@ -11,6 +11,7 @@ import type {
 } from './types'
 import type { SimObject, Simulation } from './Simulation'
 import type { QualityGovernor, QualityLevel } from './QualityGovernor'
+import { PowerPolicy, type PowerMode, MODE_LABEL, MODE_BUDGET_MS } from './PowerPolicy'
 
 const G_SI = 6.674e-11
 const MSUN_KG = 1.989e30
@@ -46,6 +47,8 @@ export class LabController implements LabCommands, SnapshotSource {
   private realistic = false
   private resetSeq = 0
   private fpsCap: 60 | 120 = 60
+  /** güç politikası; App.tsx kuruluşta bağlar (attachPower), yoksa pinsiz varsayılan */
+  private power: PowerPolicy = new PowerPolicy(null)
   private hint = ASTRONAUT_ENABLED
     ? 'Astronot hazır — bırakmak için disk düzleminde bir noktaya tıkla.'
     : 'Sahneyi keşfet — sürükleyerek döndür, tekerlek/iki parmakla yaklaş.'
@@ -76,6 +79,22 @@ export class LabController implements LabCommands, SnapshotSource {
     return this.fpsCap
   }
 
+  /** Güç politikasını bağlar (App.tsx, ?butce= pini ile kurulur). */
+  attachPower(power: PowerPolicy): void {
+    this.power = power
+    this.snap = this.buildSnapshot()
+  }
+
+  setPowerMode(mode: PowerMode | null): void {
+    this.power.setMode(mode)
+    const s = this.power.snapshot
+    this.hint =
+      mode === null
+        ? `Güç modu otomatik: ${MODE_LABEL[s.mode]} (${s.budgetMs.toFixed(0)} ms/kare) — cihaz sınıfından seçildi.`
+        : `${MODE_LABEL[mode]} güç modu: GPU kare başına en çok ${MODE_BUDGET_MS[mode]} ms meşgul kalır; kalite tavanı buna göre seçilir.`
+    this.publish()
+  }
+
   setFpsCap(cap: 60 | 120): void {
     if (cap === this.fpsCap) return
     this.fpsCap = cap
@@ -103,9 +122,12 @@ export class LabController implements LabCommands, SnapshotSource {
       ;(window as unknown as Record<string, unknown>).__lab = {
         timeScale: this.timeScale,
         simTime: this.simTime,
+        power: this.power.snapshot,
       }
     }
     if (dtSim > 0) this.sim.step(dtSim)
+    // basınç histerezisi (Compute Pressure) saniye cinsinden duvar saatiyle işler
+    this.power.tick(performance.now() / 1000)
     // Gizli sekmede kare döngüsü KASITLI olarak ~10 fps'e iner (FrameLoopDriver,
     // HIDDEN_INTERVAL_MS). Bu sahte yavaşlık governor'a yedirilirse her 1.5 sn'de
     // bir kademe inilir, her inişte geri-tepme cezası damgalanır ve sekme yarım
@@ -288,6 +310,7 @@ export class LabController implements LabCommands, SnapshotSource {
       realistic: this.realistic,
       resetSeq: this.resetSeq,
       fpsCap: this.fpsCap,
+      power: this.power.snapshot,
     }
   }
 }

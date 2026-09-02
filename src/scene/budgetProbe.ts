@@ -90,7 +90,9 @@ export class BudgetProbe {
   result: BudgetResult | null = null
 
   private readonly governor: QualityGovernor
-  private readonly budgetMs: number
+  private budgetMs: number
+  /** PowerPolicy'nin basınç nedeniyle istediği ek kademe düşüşü */
+  private extraDrop = 0
 
   constructor(governor: QualityGovernor, budgetMs: number) {
     this.governor = governor
@@ -104,6 +106,41 @@ export class BudgetProbe {
     this.phase = 'settle'
     this.frames = 0
     this.samples = []
+  }
+
+  /**
+   * Bütçe değişti (güç modu, pil, pin). Yeniden ÖLÇÜM gerekmez: tahminler
+   * duruyor, tavan yeniden seçilir. 0 = kapalı (eski davranış, tavan yok).
+   */
+  setBudget(ms: number): void {
+    if (ms === this.budgetMs) return
+    const wasOff = this.budgetMs <= 0
+    this.budgetMs = ms
+    if (ms <= 0) {
+      this.phase = 'off'
+      this.governor.setCeiling(0)
+      return
+    }
+    if (wasOff || this.phase === 'off') this.restart()
+    else if (this.phase === 'done') this.applyCeiling()
+  }
+
+  setExtraDrop(n: number): void {
+    if (n === this.extraDrop) return
+    this.extraDrop = n
+    if (this.phase === 'done') this.applyCeiling()
+  }
+
+  /** Tahminlerden tavanı seç (bütçeye sığan ilk kademe + basınç düşüşü) ve uygula. */
+  private applyCeiling(): void {
+    const r = this.result
+    if (!r) return
+    let ceiling = r.predicted.findIndex((p) => p.ms <= this.budgetMs)
+    if (ceiling < 0) ceiling = r.predicted.length - 1
+    ceiling = Math.min(ceiling + this.extraDrop, r.predicted.length - 1)
+    r.ceiling = r.predicted[ceiling].label
+    r.budgetMs = this.budgetMs
+    this.governor.setCeiling(ceiling)
   }
 
   /**
@@ -196,8 +233,6 @@ export class BudgetProbe {
       const px = cssMpix * l.dpr * l.dpr
       return { label: l.label, ms: +(lensPerMpix * weight(l, px) + MARGIN_MS).toFixed(2) }
     })
-    let ceiling = predicted.findIndex((p) => p.ms <= this.budgetMs)
-    if (ceiling < 0) ceiling = predicted.length - 1
     this.result = {
       busyMs: +busy.toFixed(2),
       k: [k1, k2],
@@ -205,17 +240,17 @@ export class BudgetProbe {
       measuredAt: at.label,
       mpix: +mpix.toFixed(2),
       predicted,
-      ceiling: predicted[ceiling].label,
+      ceiling: '',
       budgetMs: this.budgetMs,
     }
     this.cssMpixAtDone = cssMpix
     this.phase = 'done'
     this.pendingResume = true
-    this.governor.setCeiling(ceiling)
+    this.applyCeiling()
     if (import.meta.env.DEV) {
       console.info(
         `[bütçe] ${at.label} @ ${mpix.toFixed(2)} Mpix: meşgul ${busy.toFixed(2)} ms/hat ` +
-          `(k ${k1}/${k2} → ${m1.toFixed(1)}/${m2.toFixed(1)} ms) · tavan ${predicted[ceiling].label} · ` +
+          `(k ${k1}/${k2} → ${m1.toFixed(1)}/${m2.toFixed(1)} ms) · bütçe ${this.budgetMs} ms · tavan ${this.result.ceiling} · ` +
           predicted.map((p) => `${p.label} ${p.ms}`).join(' · '),
       )
     }
