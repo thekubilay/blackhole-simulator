@@ -7,6 +7,7 @@ import type { QualityGovernor } from '../sim/QualityGovernor'
 import { LENS_FRAGMENT, LENS_VERTEX, createLensUniforms, type LensUniforms } from './lensShader'
 import { LENS_LAYER, getBloomPipeline, supportsHdrPost } from './bloom'
 import { getNebulaCube } from './nebulaBake'
+import { getNoiseLattice } from './noiseBake'
 import { getLensTables } from './lensTables'
 
 /** Deliğin gözlenmiş imzasını uniform'lara aktarır — yalnız delik değişince. */
@@ -63,6 +64,9 @@ export function LensedBackground({
   const initialUniforms = useMemo(() => {
     const uniforms = createLensUniforms()
     uniforms.uNebTex.value = getNebulaCube(gl)
+    // hash12 kafesi de renderer başına bir kez pişer (~8 MB, tek çizim):
+    // disk/atmosfer gürültüsü 88 hash yerine 22 doku tap'iyle, alan birebir aynı
+    uniforms.uNoiseTex.value = getNoiseLattice(gl)
     uniforms.uToneMap.value = pipeline?.usesTarget ? 0 : 1
     // Tablolar sahneden bağımsız: süreç başına bir kez pişer (~175 ms, açılış
     // dolly'si sırasında). Bulutsu küpünün aksine renderer'a değil modüle ait.

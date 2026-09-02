@@ -114,6 +114,7 @@ shader'ında karşılıkları yoktur (paket kontrol edildi: GLSL'de `uProbe` yok
 | 8 | B2 çıkış kompoziti: iki halo exp'i + outColor atlanır |
 | 9 | sampleAtmo'nun gölgeleme zinciri sabit renge, 4×/kesişim (6 + 9 = 5× toplam) |
 | 10 | main'in ilk satırında siyah: TABAN (quad + HDR hedefi + bloom + MSAA + tuval; shader ALU'su sıfır) |
+| 11 | disk/atmosfer gürültüsü pişirilmiş dokudan değil ALU hash'inden (eski yol; noiseBake A/B) |
 
 **%45'lik "kalan"ın ayrıştırılması (2026-09-02, M1 Pro, 8.31 Mpix, ref ≈ 19.5 ms;
 paylar aynı pencerenin referansına göre):**
@@ -163,6 +164,18 @@ gemi piksellerinin ortalama rengi eski (196,163,112) → yeni (198,166,113), %1
 içinde; silüet kenar adımı eski 120 → yeni 125 (eşit yumuşaklık), AA'sız 174.
 Gemi kadrajı doldurunca hedef tuval boyutuna çıkar: eski maliyet, kötüleşme yok.
 `?aa=1&gemiaa=0` = tam eski görüntü ve maliyet (A/B için).
+
+**GÜRÜLTÜ DOKUSU UYGULANDI (2026-09-02, versions/v1.2.1):** hash12'nin tam sayı
+kafesi GPU'da aynı GLSL ile 2048² RG8 dokuya pişirilir (`src/scene/noiseBake.ts`,
+16 bit değer, köken 1024, kullanılan aralık ±632 → sarmalama yok); vnoise
+koordinatı `f*f*(3-2f)` ile önceden yumuşatılıp TEK bilineer tap alınır — donanım
+dört texeli tam vnoise ağırlıklarıyla karıştırır. Disk 88 hash → 22 tap, atmosfer
+4 → 1. Jet ALU'da kaldı (koordinatı uTime ile sınırsız büyür). **Alan birebir**
+(aynı karede HDR hedef okuması, probe 0 doku vs 11 ALU, 8.7 M örnek): fark RMS
+0.00011 (bağıl %0.05), max 0.0156, 1/255'i aşan %0.001, 4/255'i aşan %0;
+taban (0 vs 0) tam 0. **Maliyet** (7.63 Mpix, dönüşümlü): ALU 15.4 → doku
+13.3 ms; gürültü kalemi 3.8 → 1.7 (probe 1 = 11.6). −0.275 ms/Mpix, kare −%14.
+1080p'de ~0.57 ms (M1), Iris Xe'de ~1.7 ms. `__lens.probe = 11` eski ALU yolu.
 
 **Kayıtlı taban (M1 Pro, 'yüksek', 8.2 Mpix, bloom açık, zaman dondurulmuş):**
 

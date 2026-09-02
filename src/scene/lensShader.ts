@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { DISPLAY_TRANSFORM_GLSL } from './displayTransform'
 import { NEBULA_SAMPLE_GLSL } from './nebulaBake'
+import { HASH12_GLSL, NOISE_SAMPLE_GLSL } from './noiseBake'
 
 export const LENS_VERTEX = /* glsl */ `
 varying vec2 vUv;
@@ -33,6 +34,8 @@ void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }
  *   8 = B2 çıkış kompoziti: iki halo exp'i + outColor atlanır
  *   9 = sampleAtmo'nun gölgeleme zinciri sabit renge — 4× / kesişim
  *       (probe 2'nin %17'sinin içindeki pay; 6 + 9 = zincirin 5× toplamı)
+ *  11 = disk/atmosfer gürültüsü pişirilmiş dokudan değil ALU hash'inden (eski
+ *       yol; noiseBake.ts'in aynı-kare A/B'si — alan bit düzeyinde aynı olmalı)
  *  10 = main'in ilk satırında siyah yaz: geçişin TABAN maliyeti (tam ekran
  *       quad + HDR hedefi + bloom hattı + MSAA tuval; shader ALU'su koşmaz).
  *       DİKKAT: 8.3 Mpix'te tavana çarpar (8.3 ms = ?fps=120 yuvası); taban
@@ -41,8 +44,10 @@ void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }
  * ALU-bağlı) · 6 = 0.45 · 9 = 1.55 (5× zincir toplam 2.0 ms, %10) · 7 = 8.65
  * (= 1 + 2 + 6 + ~0.7 döngü yükü) · 8 ≈ 0 · taban 1.7 ms + 0.64 ms/Mpix, bunun
  * 0.27 ms/Mpix'i tuvalin 4× MSAA'sıydı — kaldırıldı, gemi kırpılmış MSAA
- * hedefe çiziliyor (shipPass.ts; `?aa=1` eski tuval MSAA'sı ile A/B). Tam
- * tablo ve yorum: scripts/olcum-protokolu.md §6.
+ * hedefe çiziliyor (shipPass.ts; `?aa=1` eski tuval MSAA'sı ile A/B). Gürültü
+ * dokuya alındı (noiseBake.ts): 7.63 Mpix'te 11 (ALU) 15.4 → 0 (doku) 13.3 ms,
+ * gürültü kalemi 3.8 → 1.7; alan birebir (HDR fark RMS 0.0001). Tam tablo ve
+ * yorum: scripts/olcum-protokolu.md §6.
  *
  * YENİ PROBE EKLERKEN: aşağıya bir sabit daha ekle ve shader'da tek satırlık
  * `${...}` olarak enjekte et. Uniform dallanması olduğu için iki dal da
@@ -67,6 +72,7 @@ const P_SHADE_CLOSE = PROBE ? '}' : ''
 const P_LOOP = PROBE ? 'if(uProbe == 7.0) break;' : ''
 const P_COMP = PROBE ? 'if(uProbe == 8.0){ gl_FragColor = vec4(col2, 1.); return; }' : ''
 const P_BLACK = PROBE ? 'if(uProbe == 10.0){ gl_FragColor = vec4(0., 0., 0., 1.); return; }' : ''
+const P_NOISE_ALU = PROBE ? 'if(uProbe == 11.0) return vnoiseA(p);' : ''
 
 export const LENS_FRAGMENT = /* glsl */ `
 precision highp float;
@@ -107,7 +113,7 @@ mat2 rot(float a){
   float c=cos(a),s=sin(a);return mat2(c,-s,s,c);
 }
 ${P_DECL}
-float hash12(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+${HASH12_GLSL}
 /**
  * (p, v) durumundan SONSUZA kalan ışın bükülmesinin kapalı formu.
  *
@@ -137,9 +143,18 @@ vec3 weakBend(vec3 p, vec3 v){
   vec3 n = (p - s0*v)/b;                      // merkezden ışına birim vektör
   return normalize(v - n*d);
 }
-float vnoise(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f);
+// ALU değer gürültüsü — YALNIZ jet için: jetin koordinatı uTime·0.02 ile
+// sınırsız büyür, pişirilmiş kafesin aralığından saatler sonra çıkar.
+float vnoiseA(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f);
   float a=hash12(i),b=hash12(i+vec2(1,0)),c=hash12(i+vec2(0,1)),d=hash12(i+vec2(1,1));
   return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
+${NOISE_SAMPLE_GLSL}
+// Disk ve atmosfer gürültüsü: aynı hash12 kafesi, dokudan (bkz. noiseBake.ts).
+// 88 hash → 22 tap; ölçüm ve doğrulama scripts/olcum-protokolu.md §6.
+float vnoise(vec2 p){
+  ${P_NOISE_ALU}
+  return vnoiseT(p);
+}
 float fbm(vec2 p){ float v=0.,a=.5; for(int i=0;i<5;i++){ v+=a*vnoise(p); p=p*2.03+vec2(17.3,9.1); a*=.5; } return v; }
 // yüksek frekanslı katmanlar için 3 oktav yeterli: 4-5. oktavlar ekran örnekleme
 // sınırının (Nyquist) altında kalır, yalnız parıldama üretir. 1.107 = amplitüd
@@ -385,7 +400,7 @@ void sampleJet(vec3 hp, vec3 vv, float dt, inout vec4 acc){
   // sinkrotron düğümleri: jet boyunca ilerleyen parlak topaklar
   // (M87'nin HST-1'i, 3C 273'ün A/B düğümleri, GRS 1915'in fırlattığı bulutlar)
   float kn = 0.5 + 0.5*sin(mod(h*uJetC.y - uTime*uJetC.z*TAU, TAU));
-  float turb = 0.55 + 0.45*vnoise(vec2(h*1.7, atan(d.y, d.x)*1.9) + uTime*0.02);
+  float turb = 0.55 + 0.45*vnoiseA(vec2(h*1.7, atan(d.y, d.x)*1.9) + uTime*0.02);
   // genişleyen akışta yüzey parlaklığı düşer; uçta yumuşak sönüm
   float prof = pow(uJetB.x/max(h, uJetB.x), 0.9) * smoothstep(uJetB.y, uJetB.y*0.55, h);
   float sp = max(length(vv), 1e-5);
@@ -939,6 +954,8 @@ export type LensUniforms = {
   uNebPar: THREE.IUniform<THREE.Vector2>
   /** açılışta pişirilen bulutsu alanı (bkz. nebulaBake.ts) */
   uNebTex: THREE.IUniform<THREE.CubeTexture | null>
+  /** açılışta pişirilen hash12 kafesi — disk/atmosfer değer gürültüsü (bkz. noiseBake.ts) */
+  uNoiseTex: THREE.IUniform<THREE.Texture | null>
   /** 0 = doğrusal HDR çıkış (bloom hattı devrede), 1 = shader kendi ton eşlemesini yapar */
   uToneMap: THREE.IUniform<number>
   /** DEV bütçe ölçüm anahtarı; üretimde shader'da karşılığı yok (bkz. PROBE) */
@@ -971,6 +988,7 @@ export function createLensUniforms(): LensUniforms {
     uNebColor: { value: new THREE.Vector3(0.028, 0.01, 0.006) },
     uNebPar: { value: new THREE.Vector2(1, 1) },
     uNebTex: { value: null },
+    uNoiseTex: { value: null },
     uToneMap: { value: 1 },
     uProbe: { value: 0 },
     uJetA: { value: new THREE.Vector4(0, 0, 0, 0) },
