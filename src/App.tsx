@@ -51,7 +51,10 @@ export default function App() {
     // ?b2=0 → disk kesişimleri tablodan ÇIKARILIR, hepsi marşa döner (A/B ölçümü).
     // Varsayılan AÇIK. Faz B3'ten beri YAKALANAN ışın da tabloda (gölge önündeki
     // disk): marşa düşen piksel %0, marş yalnız jet için kaldı. Ölçüm 'yüksek',
-    // 2.89 Mpix: B2 11.55 ms → B3 8.55 ms; aynı karede tam marş 30.85 ms.
+    // 2.89 Mpix: B2 11.55 ms → B3 7.9 ms; aynı karede tam marş 30.85 ms.
+    // (B3'ün ilk ölçümü 8.55 ms idi ve ?fps=120'nin 8.33 ms'lik kare yuvasına
+    //  çarpmış bir vsync artefaktıydı; doğrusu ölçek eğrisinden geliyor —
+    //  kare ≈ 2.2 ms + 1.97 ms × Mpix. Bkz. bruneton-dogrulama/README.md.)
     const b2 = params.get('b2') !== '0'
     // ?fon=0.6 → katmanlı render ölçeği PİNLENİR (A/B ölçümü). Pin yoksa
     // ölçeği kalite kademesi belirler (QualityGovernor.levels).
