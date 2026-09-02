@@ -28,6 +28,10 @@ export interface QualityLevel {
 // "kabul edilebilir" sayar ve daha keskin kademe yerleşir. BEDELİ ISI: tavanı
 // tutturamayan kademe GPU'yu %100 doluluğa çıkarır (60 fps'te 'orta' %86'da
 // kalır), fan daha erken döner. Bkz. lens-maliyet-butcesi / ısı çalışması.
+// ISI BEDELİNİN ÇÖZÜMÜ TAVAN (2026-09-02): FPS bandı tek başına eldeki tüm payı
+// harcar. Açılışta BudgetProbe (scene/budgetProbe.ts) GPU-meşgul süreyi ölçüp
+// bütçeye (≤10 ms @ 60 Hz) sığan en yüksek kademeyi TAVAN olarak koyar; FPS
+// histerezisi artık yalnız güvenlik ağıdır — aşağı iner, en fazla tavana döner.
 const DOWN_RATIO = 0.8 // tavanın altında kabul edilebilir bant (60 → 48)
 const UP_RATIO = 0.95 // yalnız tavanı fiilen tutturan kademe yukarı denemesi yapar (60 → 57)
 const DOWN_HOLD = 3 // sn — EMA'nın yeni kademede oturmasına izin ver
@@ -57,6 +61,16 @@ export class QualityGovernor {
   /** gerçek başlangıç kademesi kurucuda etikete göre seçilir (indeks sabitlemeyin) */
   private level = 0
   private pinned = false
+  /**
+   * BÜTÇE TAVANI: izin verilen en yüksek kademe (indeks; 0 = kısıt yok). Açılış
+   * ölçümü (BudgetProbe) koyar. FPS ağı bunun üstüne tırmanmaz; tavan konunca
+   * kademe iki yönde de doğrudan oraya taşınır ("doğru kademe ilk karede").
+   */
+  private ceiling = 0
+  /** BudgetProbe ölçüm karelerinde (hat k kez çizilir, 30-60 ms) askıda: o kareler
+   *  FPS ağına sızarsa ağ kademe düşürür ve ölçüm yeniden boyutlanan hedeflerle
+   *  kirlenir (yaşandı: yeniden ölçümde 'iyi'ye düştü, 4.2 vs beklenen 2.9 ms) */
+  private suspended = false
   private ema = 60
   private acc = 0
   private stable = 0
@@ -175,6 +189,41 @@ export class QualityGovernor {
     this.penalty.fill(RETRY_BASE)
   }
 
+  /** Kare tavanı (fps); BudgetProbe tavan-üstü ölçümünü buna göre kurar. */
+  get frameCap(): number {
+    return this.cap
+  }
+
+  /**
+   * Bütçe tavanını koyar (BudgetProbe). Pinli değilse kademe doğrudan tavana
+   * taşınır — aşağı da yukarı da: ölçüm "bu cihaz şunu sessiz çalıştırır" der,
+   * 12 sn'lik FPS tırmanışını beklemek anlamsızdır. Pinliyken yalnız kaydedilir.
+   */
+  setCeiling(index: number): void {
+    const i = Math.max(0, Math.min(Math.floor(index), this.levels.length - 1))
+    this.ceiling = i
+    if (this.pinned || this.level === i) return
+    this.level = i
+    this.stable = 0
+    this.held = 0
+    this.forgive = 0
+    this.notify()
+  }
+
+  get ceilingLabel(): string {
+    return this.levels[this.ceiling].label
+  }
+
+  /** Ölçüm kareleri boyunca FPS ağı durur; kalkınca EMA tavana sıfırlanır. */
+  setSuspended(on: boolean): void {
+    if (this.suspended === on) return
+    this.suspended = on
+    if (!on) {
+      this.ema = this.cap
+      this.acc = 0
+    }
+  }
+
   /** Elle seviye seç (adaptasyonu kapatır); null = otomatiğe dön. */
   setLevel(label: string | null): void {
     if (label === null) {
@@ -186,6 +235,11 @@ export class QualityGovernor {
       // anlamına da gelebilir, eski cezalar keşfi kilitlemesin
       this.cool.fill(0)
       this.penalty.fill(RETRY_BASE)
+      // elle tavanın üstüne çıkılmışsa otomatik tavana döner
+      if (this.level < this.ceiling) {
+        this.level = this.ceiling
+        this.notify()
+      }
       return
     }
     const i = this.levels.findIndex((l) => l.label === label)
@@ -214,6 +268,7 @@ export class QualityGovernor {
   }
 
   tick(dt: number): void {
+    if (this.suspended) return
     const fps = 1 / Math.max(dt, 1e-4)
     this.ema += (fps - this.ema) * 0.06
     this.acc += dt
@@ -262,7 +317,7 @@ export class QualityGovernor {
     } else if (
       this.ema > this.upFps &&
       this.stable > UP_HOLD &&
-      this.level > 0 &&
+      this.level > this.ceiling && // bütçe tavanının üstüne asla
       this.cool[this.level - 1] <= 0
     ) {
       this.level--

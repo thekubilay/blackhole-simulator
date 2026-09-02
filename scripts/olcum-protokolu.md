@@ -222,6 +222,39 @@ __lens.probe = 0
 Medyan kullan: rAF zaman damgaları arada 0.4 ms gibi anlamsız değerler üretir
 (kare birleşmesi), ortalama bundan bozulur.
 
+## 9. Bütçe probe'u — açılışta GPU-meşgul ölçümü (2026-09-02, v1.2.1)
+
+Governor artık iki katlı: **bütçe TAVANI** (açılışta ölçülür) + **FPS güvenlik
+ağı** (yalnız aşağı iner, en fazla tavana döner). Ölçüm `src/scene/budgetProbe.ts`:
+
+- Hat aynı karede **k kez** çizilir (BloomPipeline.render repeats), kare tavanın
+  üstüne çıkar; iki k noktasının **eğimi** = bir hattın GPU-meşgul süresi. Sunum
+  boşluğu (~2 ms, §1) kesim noktasına düşer, bütçeden sayılmaz.
+- Uyarlanır k: keşif k=4 (tavandaysa k=12), sonra k1 ≈ 1.6 tavan / tahmin, k2 = 2k1
+  (≤ 32). Nokta başına 7 kare, medyan. Toplam ~25 ağır kare, açılış dolly'sinde.
+- Her tekrar öncesi lens'in uTime'ı dürtülür (Apple özdeş çizim tekilleştirmesine
+  karşı sigorta; bu koşumda tekilleştirme GÖZLENMEDİ: dürtmesiz eğim daha düşük
+  çıkmadı).
+- Ölçüm karelerinde governor **askıda** (`setSuspended`): yoksa 30-60 ms'lik
+  kareler FPS ağını tetikliyor, kademe düşüyor ve ölçüm yeniden boyutlanan
+  hedeflerle kirleniyordu (yaşandı: 'iyi'de 4.2 vs beklenen 2.9).
+- Ölçüm governor'ın BAŞLANGIÇ kademesinde; diğerleri modelle:
+  `meşgul = lensPer × [lensMpix + 0.27·mpix + (bloom ? 0.25·mpix : 0)] + 1 ms`
+  (0.27 çıktı tarafı, 0.25 bloom — M1 oranları; +1 ms tuval sunumu). Tavan =
+  bütçeye sığan ilk kademe. `?butce=<ms>` (varsayılan 10), 0 = kapalı.
+
+**Ölçüldü (M1 Pro, 1512×747 CSS, dpr 1.6 = 2.89 Mpix):**
+
+| ölçüm kademesi | k1/k2 | medyanlar | meşgul (ms/hat) | 'yüksek' tahmini |
+|---|---|---|---|---|
+| orta | 11/22 | 27.2 / 51.6 | 2.22 | 5.93 (eski model) |
+| orta | 11/22 | 29.0 / 56.1 | 2.46 | 6.47 (eski) → 5.48 (OUT_RATIO ile) |
+| yüksek (doğrudan) | 6/12 | 27.6 / 52.9 | 4.22 | 5.22 |
+
+Tavan her koşumda 'yüksek' (≤ 10); kademe 'orta'dan 'yüksek'e ilk saniyede
+atlıyor (12 sn'lik FPS tırmanışı yerine). 120 Hz'de bütçe değişmez (bilinçli
+akıcılık tercihi, HUD söyler).
+
 ## 8. Ayrıca
 
 ANGLE/Metal'in dört ölçüm tuzağı (timer query, finish, clientWaitSync, TBDR

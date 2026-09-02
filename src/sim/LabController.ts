@@ -83,7 +83,7 @@ export class LabController implements LabCommands, SnapshotSource {
     this.governor.setFrameCap(cap)
     this.hint =
       cap === 120
-        ? '120 fps tavanı: ProMotion ekranda gözle görülür akıcılık — GPU işi ~2 katına çıkar, 60 Hz ekranda fark yaratmaz (vsync).'
+        ? '120 fps tavanı: ProMotion ekranda gözle görülür akıcılık — GPU işi ~2 katına çıkar, 60 Hz ekranda fark yaratmaz (vsync). Kalite kademesi 60 Hz güç bütçesine göre kalır, fan dönebilir.'
         : '60 fps tavanı: GPU uzun oturumda serin ve sessiz kalır (varsayılan).'
     this.publish()
   }

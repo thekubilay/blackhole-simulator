@@ -1,7 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
+import * as THREE from 'three'
 import type { QualityGovernor } from '../sim/QualityGovernor'
 import { getBloomPipeline, supportsHdrPost } from './bloom'
+import { BudgetProbe } from './budgetProbe'
 
 /**
  * Bloom hattını süren sürücü. `useFrame`'e 1 önceliği verilmesi R3F'in
@@ -22,14 +24,24 @@ function BloomDriver({
   pin,
   lensScale,
   shipMsaa,
+  budgetMs,
 }: {
   governor: QualityGovernor
   pin: boolean | null
   lensScale: number | null
   shipMsaa: boolean
+  budgetMs: number
 }) {
   const pipeline = useThree((s) => getBloomPipeline(s.gl))
   useEffect(() => pipeline.setShipMsaa(shipMsaa), [pipeline, shipMsaa])
+  // Açılış bütçe ölçümü: hattı birkaç karede k kez çizdirir, GPU-meşgul süreyi
+  // eğimden alır, governor'a kalite TAVANINI koyar (bkz. budgetProbe.ts).
+  const probe = useMemo(() => new BudgetProbe(governor, budgetMs), [governor, budgetMs])
+  useEffect(() => {
+    // DEV ölçüm kancası: `__butce.result`, `__butce.restart()`, `__butce.nudge`
+    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__butce = probe
+  }, [probe])
+  const size = useMemo(() => new THREE.Vector2(), [])
   // Parlama ve katmanlı render ölçeğinin ikisi de kalite kademesinden gelir;
   // pinler (?bloom=, ?fon=) kademe kararını ezer. Hat bu isteklerin ikisini de
   // kare SONUNDA işler (BloomPipeline.commit) — geçiş karesinde lens'in
@@ -42,7 +54,13 @@ function BloomDriver({
     uygula(governor.current)
     return governor.onChange(uygula)
   }, [governor, pipeline, pin, lensScale])
-  useFrame(({ scene, camera }) => pipeline.render(scene, camera), 1)
+  useFrame(({ scene, camera, gl }, delta) => {
+    // delta = bir ÖNCEKİ karenin süresi (rAF aralığı): probe onu önceki karenin
+    // tekrar sayısıyla eşler ve bu kare için tekrar sayısını döndürür (çoğu kare 1)
+    gl.getDrawingBufferSize(size)
+    const repeats = probe.frame(delta, (size.x * size.y) / 1e6)
+    pipeline.render(scene, camera, repeats)
+  }, 1)
   return null
 }
 
@@ -57,6 +75,7 @@ export function PostFx({
   pin,
   lensScale,
   shipMsaa,
+  budgetMs,
 }: {
   governor: QualityGovernor
   pin: boolean | null
@@ -64,9 +83,17 @@ export function PostFx({
   lensScale: number | null
   /** ?gemiaa=0 → false: gemi doğrudan tuvale (eski yol, A/B) */
   shipMsaa: boolean
+  /** GPU-meşgul bütçesi (ms, 60 Hz); ?butce=<ms>, 0 = açılış ölçümü kapalı */
+  budgetMs: number
 }) {
   const enabled = useThree((s) => supportsHdrPost(s.gl))
   return enabled ? (
-    <BloomDriver governor={governor} pin={pin} lensScale={lensScale} shipMsaa={shipMsaa} />
+    <BloomDriver
+      governor={governor}
+      pin={pin}
+      lensScale={lensScale}
+      shipMsaa={shipMsaa}
+      budgetMs={budgetMs}
+    />
   ) : null
 }

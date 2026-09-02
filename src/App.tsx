@@ -27,7 +27,7 @@ import { useGameSnapshot } from './hooks/useGameSnapshot'
 export default function App() {
   const coarsePointer = useMedia('(pointer: coarse)')
   // deps boş: simülasyon bir kez kurulur, kuruluştaki işaretçi türü kullanılır
-  const { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa } = useMemo(() => {
+  const { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa, budgetMs } = useMemo(() => {
     // ?kalite=yuksek|orta|dusuk|mobil → governor sabitlenir (test/ölçüm aracı)
     const ASCII: Record<string, string> = { yuksek: 'yüksek', dusuk: 'düşük' }
     const params = new URLSearchParams(window.location.search)
@@ -70,7 +70,13 @@ export default function App() {
     // Bağlam özniteliği çalışma anında değişmez; yalnız yüklenişte okunur.
     const aa = params.get('aa') === '1'
     const shipMsaa = params.get('gemiaa') !== '0'
-    return { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa }
+    // ?butce=<ms> → GPU-meşgul bütçesi (60 Hz'de kare başına, varsayılan 10 =
+    // ~%60 doluluk, fan sessiz). Açılışta ölçülür ve kalite TAVANI olur
+    // (scene/budgetProbe.ts). 0 = ölçüm kapalı, eski FPS-tek davranış (A/B).
+    // Sayı cihaza göre kalibre edilebilir: fan hâlâ dönüyorsa düşür.
+    const butceRaw = params.get('butce')
+    const budgetMs = butceRaw === null ? 10 : Math.max(0, Number(butceRaw) || 0)
+    return { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa, budgetMs }
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır
   const gameActive = useGameSnapshot(game).active
@@ -103,7 +109,13 @@ export default function App() {
         <SimulationLayer controller={controller} />
         <SpawnPlane onSpawn={controller.spawnAt} />
         {/* En sonda: öncelikli useFrame ile kareyi devralır (bkz. PostFx) */}
-        <PostFx governor={governor} pin={bloomPin} lensScale={lensScale} shipMsaa={shipMsaa} />
+        <PostFx
+          governor={governor}
+          pin={bloomPin}
+          lensScale={lensScale}
+          shipMsaa={shipMsaa}
+          budgetMs={budgetMs}
+        />
       </Canvas>
       <Overlay controller={controller} game={game} />
       <RotateGate />

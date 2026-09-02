@@ -88,6 +88,14 @@ export function LensedBackground({
     const hdrPath = pipeline?.usesTarget ?? false
     uniforms.uToneMap.value = hdrPath ? 0 : 1
     mesh.current?.layers.set(hdrPath ? LENS_LAYER : 0)
+    // Bütçe ölçümünde hat aynı karede k kez çizilir; Apple TBDR özdeş çizimleri
+    // tekilleştirmesin diye her tekrar öncesi uTime kıpırdatılır (bir sonraki
+    // karede simTime yeniden yazılır, iz kalmaz). Bkz. budgetProbe.ts.
+    if (pipeline && !pipeline.hasLensNudge) {
+      pipeline.setLensNudge(() => {
+        uniforms.uTime.value += 1e-3
+      })
+    }
     camera.updateMatrixWorld()
     uniforms.uTime.value = controller.simTime
     uniforms.uCamPos.value.copy(camera.position)

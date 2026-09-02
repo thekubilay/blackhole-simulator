@@ -368,10 +368,38 @@ export class BloomPipeline {
   }
 
   /**
+   * Tekrarlar arasında lens uniform'unu kıpırdatan kanca (LensedBackground
+   * kurar). BudgetProbe hattı aynı karede k kez çizerken Apple TBDR özdeş
+   * çizimleri tekilleştirmesin diye her tekrar farklı olmalı.
+   */
+  private lensNudge: ((i: number) => void) | null = null
+
+  setLensNudge(fn: ((i: number) => void) | null): void {
+    this.lensNudge = fn
+  }
+
+  get hasLensNudge(): boolean {
+    return this.lensNudge !== null
+  }
+
+  /**
    * Bir kareyi baştan sona çizer. R3F'in otomatik render'ı, bu hattı süren
    * useFrame önceliği ile kapalıdır (bkz. PostFx.tsx).
+   *
+   * `repeats` > 1 yalnız BudgetProbe'un ölçüm karelerinde: hat aynı karede k kez
+   * çizilir, kare tavanın üstüne çıkar, eğim GPU-meşgul süreyi verir. Kademe
+   * değişimi (commit) tekrarlar arasında DEĞİL, karenin sonunda işlenir — yoksa
+   * lens'in uToneMap/katman durumu ile çizilen yol tekrar ortasında ayrışır.
    */
-  render(scene: THREE.Scene, camera: THREE.Camera): void {
+  render(scene: THREE.Scene, camera: THREE.Camera, repeats = 1): void {
+    for (let i = 0; i < repeats; i++) {
+      if (i > 0 && this.lensNudge) this.lensNudge(i)
+      this.renderOnce(scene, camera)
+    }
+    this.commit()
+  }
+
+  private renderOnce(scene: THREE.Scene, camera: THREE.Camera): void {
     const { renderer } = this
     // DOĞRUDAN YOL (parlama kapalı). Yalnız mip zincirini atlamak ÖLÇÜLDÜ ve
     // HİÇBİR ŞEY kazandırmıyor: 2.89 Mpix'te 25.16 → 25.40 ms, yani zincir
@@ -393,7 +421,6 @@ export class BloomPipeline {
       renderer.autoClear = true
       renderer.render(scene, camera)
       renderer.autoClear = prevAutoClear
-      this.commit()
       return
     }
     const size = renderer.getDrawingBufferSize(new THREE.Vector2())
@@ -459,7 +486,6 @@ export class BloomPipeline {
     }
 
     renderer.autoClear = prevAutoClear
-    this.commit()
   }
 
   dispose(): void {

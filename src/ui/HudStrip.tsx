@@ -45,12 +45,13 @@ export function HudStrip({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
                 60 fps — serin ve sessiz (varsayılan)
               </button>
               <button className={s.fpsCap === 120 ? 'on' : ''} onClick={() => lab.setFpsCap(120)}>
-                120 fps — ProMotion akıcılığı
+                120 fps — ProMotion akıcılığı (fan dönebilir)
               </button>
             </div>
             <div className="body" style={{ marginTop: 8 }}>
               120, yalnız yüksek tazelemeli ekranlarda (ProMotion vb.) fark yaratır — 60 Hz ekranda
-              vsync zaten 60'ta tutar. GPU işi yaklaşık iki katına çıkar.
+              vsync zaten 60'ta tutar. Kalite kademesi 60 Hz güç bütçesine göre seçilir ve 120'de
+              değişmez: GPU işi iki katına çıkar, fan dönebilir.
             </div>
           </div>
         </Dialog>
@@ -60,8 +61,10 @@ export function HudStrip({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
           <div className="card controls-dialog">
             <div className="panel-title">KALİTE</div>
             <div className="body" style={{ marginTop: 8 }}>
-              Çözünürlük (piksel oranı) ve ışın izleme adım sayısı. <b>Otomatik</b> mod FPS'e göre seçer;
-              elle seçim adaptasyonu kapatır — seviyeleri deneyip FPS'i canlı izleyebilirsiniz.
+              Çözünürlük (piksel oranı) ve ışın izleme adım sayısı. <b>Otomatik</b> mod açılışta GPU
+              yükünü ölçüp fanı döndürmeyen en yüksek kademeyi tavan yapar; FPS düşerse aşağı iner,
+              en fazla tavana geri çıkar. Elle seçim adaptasyonu kapatır — seviyeleri deneyip FPS'i
+              canlı izleyebilirsiniz.
             </div>
             <div className="lbl">SEVİYE</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
@@ -75,7 +78,7 @@ export function HudStrip({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
                 </button>
               ))}
               <button className={s.qualityAuto ? 'on' : ''} onClick={() => lab.setQuality(null)}>
-                otomatik — FPS'e göre seçilir
+                otomatik — GPU bütçesi tavan, FPS güvenlik ağı
               </button>
             </div>
           </div>
