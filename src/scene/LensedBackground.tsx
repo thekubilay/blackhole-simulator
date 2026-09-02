@@ -119,7 +119,7 @@ export function LensedBackground({
       // döndüğü için iki ardışık kare kendiliğinden %31 piksel farkı verir ve
       // yol farkı o gürültünün altında kaybolur.
       if (dev.time !== undefined) uniforms.uTime.value = dev.time
-      // `__lens.probe = 1..4` bütçe kalemlerini tek tek kapatır (lensShader PROBE)
+      // `__lens.probe = 1..10` bütçe kalemlerini tek tek kapatır (lensShader PROBE)
       uniforms.uProbe.value = dev.probe ?? 0
       dev.uniforms = uniforms
     }
