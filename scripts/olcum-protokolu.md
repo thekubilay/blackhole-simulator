@@ -120,6 +120,30 @@ shader'ında karşılıkları yoktur (paket kontrol edildi: GLSL'de `uProbe` yok
 | 12 | biriken EMİSYON alfası (acc.a) gri harita — beyaz = opak |
 | 13 | yalnız gökyüzünün diske sızan payı (1−acc.a)·bg |
 | 14 | gökyüzü ÖRTMESİ kapalı (occ = 0, eski davranış) — yıldız sızması A/B'si |
+| 15 | gerçekçi kayma zinciri sanatsal modda da koşar (eski davranış) — atlama A/B'si |
+
+**GÖLGELEME ZİNCİRİ SANATSAL MODDA BOŞA KOŞUYORDU (2026-09-02):** yol
+haritasının son maddesi "zinciri kesişim başına bir kez hesapla" idi. Hoist
+denendi ve **REDDEDİLDİ**: kesişimin shift/tRel'ini 4 atmosfer örneğine
+paylaştırmak (örnekler ışın boyunca ±su kayık) gerçekçi modda piksellerin
+%0.68'ini 4/255'ten fazla değiştiriyor (RMS 0.0039, tepe 0.31) — kaliteden ödün.
+
+Ölçüm sırasında **daha iyisi bulundu**: sanatsal modda (varsayılan) zincirin
+sonucu zaten ATILIYOR — `boost` da renk de `mix(..., uRealism)` ile geçiyor ve
+uRealism = 0'da ikisi de zinciri düşürüyor. Yani 5 sqrt + 2 pow + 3 div, kesişim
+başına 5 kez, tamamen boşa gidiyordu. Artık `if(uRealism > 0.001)` (uniform
+dallanma, warp tekdüze) ile atlanıyor:
+
+| | ms @ 7.63 Mpix |
+|---|---|
+| zincir koşuyor (probe 15, eski) | 22.70 |
+| atlanıyor (yeni, sanatsal) | 20.65 |
+| **kazanç** | **2.05** (0.27 ms/Mpix → 1080p'de 0.56) |
+
+Görsel fark **tam sıfır** (aynı kare, probe 0 vs 15: max 0, 1/255 aşan %0) —
+sonuç zaten kullanılmıyordu. Gerçekçi modda davranış ve maliyet değişmedi.
+DERS: bir ALU zincirini ucuzlatmadan önce sonucunun KULLANILIP kullanılmadığına
+bak; `mix(x, y, uniform)` deseni bütün bir dalı ölü koda çevirebiliyor.
 
 **YILDIZLAR DİSKİN ÜSTÜNDE GÖRÜNÜYORDU (2026-09-02, kullanıcı bildirdi):**
 Teşhis probe 12 ile: diskin dokunduğu 891 bin pikselin **%85.5'inde acc.a < 0.1**

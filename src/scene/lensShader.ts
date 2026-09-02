@@ -82,6 +82,9 @@ const P_SKY_M = PROBE ? 'if(uProbe == 13.0){ gl_FragColor = vec4((1.0 - acc.a)*b
 // 14 = gökyüzü örtmesi KAPALI (eski davranış): yıldızların diskin arkasından
 // sızması aynı karede A/B ölçülebilsin diye.
 const P_OCC = PROBE ? 'if(uProbe != 14.0) ' : ''
+// 15 = gerçekçi zincir sanatsal modda da koşar (eski davranış) — atlamanın
+// kazancı ve görsel bedeli (sıfır olmalı) aynı karede A/B ölçülsün diye
+const P_REALISM = PROBE ? 'uProbe == 15.0 || ' : ''
 
 export const LENS_FRAGMENT = /* glsl */ `
 precision highp float;
@@ -271,6 +274,32 @@ float diskPatchF(vec2 xz, float rr, float n){
   float q = 0.5+0.5*sin(mod(3.0*ang - w*1.7 - rr*0.8, TAU));
   return max(1.0 + amp*(1.35*p*q - 0.45), 0.05);
 }
+/**
+ * RELATİVİSTİK KAYMA ZİNCİRİ — yörünge Doppler'i + kütleçekimsel kayma.
+ * Tek yerde: sampleDisk ve sampleAtmo aynı fiziği iki kez yazmasın (DRY) ve
+ * kesişim başına BİR kez hesaplanabilsin (bkz. çağıranlardaki hoist).
+ * shift = g = ν_gözlenen/ν_yayılan; tRel = gözlenen göreli sıcaklık.
+ * Maliyeti 5 sqrt + 2 pow + 3 div — karenin en pahalı ALU zincirlerinden.
+ */
+void shiftAt(float rr, vec3 hp, vec3 vn, out float shift, out float tRel){
+  vec3 td = normalize(vec3(-hp.z, 0., hp.x));
+  // yerel statik gözlemcinin ölçtüğü dairesel yörünge hızı — Newton'un
+  // √(M/r)'si DEĞİL: v = √(M/r)/√(1−rs/r); ISCO'da (3 rs) tam c/2.
+  // 0.62 tavanı ancak yüksek spinde ISCO 2.30 rs'in altına inince devreye
+  // girer (shader metriği Schwarzschild, uDiskIn ise Kerr ISCO'su).
+  float rb = max(rr, 1.4);
+  float beta = clamp(sqrt(0.5/rb)/sqrt(1.-1./rb), 0., 0.62);
+  float gamma = 1./sqrt(1.-beta*beta);
+  float dop = 1./(gamma*(1.+beta*dot(td,vn)));
+  float gfac = sqrt(max(1.-1./rr, 0.03));   // kütleçekimsel kayma √(1−rs/r)
+  shift = dop * gfac;
+  // Novikov–Thorne ince disk: T ∝ [r⁻³·(1−√(r_in/r))]^(1/4). İç kenarda tork
+  // sıfırdır ⇒ T(r_in)=0; sıcaklık tepesi r=(49/36)·r_in ≈ 1.36·r_in'de.
+  // 2.77 çarpanı bu tepeyi eski saf r^(−3/4) profilinin tepesine oturtur:
+  // renk kalibrasyonu korunur, yalnız iç kenar sönükleşir.
+  float xIn = uDiskIn/max(rr, uDiskIn);
+  tRel = 2.77 * pow(xIn, 0.75) * pow(max(1.-sqrt(xIn), 0.), 0.25) * shift;
+}
 // hp: örnek noktası (y ≠ 0 olabilir — hacim örneği), H: yerel yarı kalınlık,
 // dsl: bu örneğin temsil ettiği ışın yolu uzunluğu (hacim entegrasyon ağırlığı)
 void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc, inout float occ){
@@ -311,40 +340,30 @@ void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc, inout floa
   E *= uDiskGlow * diskFlicker(rr) * diskPatchF(hp.xz, rr, n);
   vec3 c;
   ${P_SHADE_DISK}
-  vec3 td = normalize(vec3(-hp.z, 0., hp.x));
-  // yerel statik gözlemcinin ölçtüğü dairesel yörünge hızı — Newton'un
-  // √(M/r)'si DEĞİL: v = √(M/r)/√(1−rs/r); ISCO'da (3 rs) tam c/2.
-  // 0.62 tavanı ancak yüksek spinde ISCO 2.30 rs'in altına inince devreye
-  // girer (shader metriği Schwarzschild, uDiskIn ise Kerr ISCO'su).
-  float rb = max(rr, 1.4);
-  float beta = clamp(sqrt(0.5/rb)/sqrt(1.-1./rb), 0., 0.62);
-  float gamma = 1./sqrt(1.-beta*beta);
-  float dop = 1./(gamma*(1.+beta*dot(td,vn)));
-  float gfac = sqrt(max(1.-1./rr, 0.03));   // kütleçekimsel kayma √(1−rs/r)
-  float shift = dop * gfac;                 // toplam g = ν_gözlenen/ν_yayılan
-  // Sanatsal = Interstellar'ın gerçek tercihi (filmdeki disk = Fig 15a: renk
-  // VE parlaklık kayması yok; Nolan asimetriyi seyirci için tamamen çıkarttı):
-  // boost 1, disk simetrik altın halka kalır. Gerçekçi: bolometrik I ∝ g⁴ —
-  // yaklaşan taraf kat kat parlak, iç kenar kütleçekimsel kaymayla SÖNÜK;
-  // gerçekçi pozlama düşük tutulur: yoksa her iki yan da ton eşlemede beyaza
-  // kırpılır ve g⁴'ün ~20× asimetrisi görünmez olur (Luminet 1979 kontrastı)
-  // 2.35/uDiskIn: pozlama deliğe normalize (uç spinde ISCO'ya bağlı emisyon
-  // profili tüm kareyi karartmasın) — fizik değil, kamera pozlaması
-  float boostR = 0.16 * (2.35/uDiskIn) * pow(shift, 4.0);
-  E *= mix(1.0, boostR, uRealism);
   // Sanatsal renk: altın palet, Doppler tonu YOK (kaymalar gerçekçiye taşındı);
   // verim beyazlığı kalır — spin farkı sanatsalda da okunabilsin
   vec3 cA = diskRamp(rr);
   cA = mix(cA, vec3(1.08,1.02,.95), clamp(uEff*1.6*pow(uDiskIn/rr, 2.0), 0., .5));
-  // Gerçekçi renk: Shakura–Sunyaev T ∝ r^(−3/4), gözlenen sıcaklık g ile kayar —
-  // disk mavi-beyaz, yaklaşan taraf maviye, uzaklaşan/iç bölge kızıla
-  // Novikov–Thorne ince disk: T ∝ [r⁻³·(1−√(r_in/r))]^(1/4). İç kenarda tork
-  // sıfırdır ⇒ T(r_in)=0; sıcaklık tepesi r=(49/36)·r_in ≈ 1.36·r_in'de.
-  // 2.77 çarpanı bu tepeyi eski saf r^(−3/4) profilinin tepesine oturtur:
-  // renk kalibrasyonu korunur, yalnız iç kenar sönükleşir.
-  float xIn = uDiskIn/max(rr, uDiskIn);
-  float tRel = 2.77 * pow(xIn, 0.75) * pow(max(1.-sqrt(xIn), 0.), 0.25) * shift;
-  c = mix(cA, bbRamp(tRel), uRealism);
+  c = cA;
+  // Sanatsal = Interstellar'ın gerçek tercihi (filmdeki disk = Fig 15a: renk
+  // VE parlaklık kayması yok; Nolan asimetriyi seyirci için tamamen çıkarttı):
+  // boost 1, disk simetrik altın halka kalır. Gerçekçi: bolometrik I ∝ g⁴ —
+  // yaklaşan taraf kat kat parlak, iç kenar kütleçekimsel kaymayla SÖNÜK.
+  //
+  // SANATSAL MODDA ZİNCİR HİÇ KOŞMAZ: boost da renk de mix(..., uRealism) ile
+  // geçer, uRealism = 0'da ikisi de sonucu ATAR — yani 5 sqrt + 2 pow + 3 div
+  // varsayılan modda tamamen boşa gidiyordu (ölçüldü: 2.0 ms @ 8.3 Mpix, disk
+  // 0.45 + atmosfer 1.55). Uniform dallanma: tüm warp aynı dalı alır.
+  if(${P_REALISM}uRealism > 0.001){
+    float shift, tRel;
+    shiftAt(rr, hp, vn, shift, tRel);
+    // 2.35/uDiskIn: pozlama deliğe normalize (uç spinde ISCO'ya bağlı emisyon
+    // profili tüm kareyi karartmasın) — fizik değil, kamera pozlaması
+    E *= mix(1.0, 0.16 * (2.35/uDiskIn) * pow(shift, 4.0), uRealism);
+    // Gerçekçi renk: Shakura–Sunyaev T ∝ r^(−3/4), gözlenen sıcaklık g ile
+    // kayar — disk mavi-beyaz, yaklaşan taraf maviye, iç bölge kızıla
+    c = mix(cA, bbRamp(tRel), uRealism);
+  }
   ${P_SHADE_CLOSE}
   // hacim ağırlığı: Gauss yoğunluk × (yol/kalınlık); 0.5 = dik geçişin
   // toplamı eski tek-örnek pozlamayla eşleşir (Σwv ≈ 1)
@@ -383,22 +402,18 @@ void sampleAtmo(vec3 hp, vec3 vn, float H, float ds, inout vec4 acc, inout float
   float D = fade * (0.25 + 0.75*lump*lump) * pow(uDiskIn/rr, 2.6);
   vec3 c; float boost;
   ${P_SHADE_ATMO}
-  vec3 td = normalize(vec3(-hp.z, 0., hp.x));
-  // yerel statik gözlemcinin ölçtüğü dairesel yörünge hızı — Newton'un
-  // √(M/r)'si DEĞİL: v = √(M/r)/√(1−rs/r); ISCO'da (3 rs) tam c/2.
-  // 0.62 tavanı ancak yüksek spinde ISCO 2.30 rs'in altına inince devreye
-  // girer (shader metriği Schwarzschild, uDiskIn ise Kerr ISCO'su).
-  float rb = max(rr, 1.4);
-  float beta = clamp(sqrt(0.5/rb)/sqrt(1.-1./rb), 0., 0.62);
-  float gamma = 1./sqrt(1.-beta*beta);
-  float dop = 1./(gamma*(1.+beta*dot(td,vn)));
-  float gfac = sqrt(max(1.-1./rr, 0.03));
-  // sanatsal kaymasız (bkz. sampleDisk), gerçekçi g⁴
-  boost = mix(1.0, 0.16*(2.35/uDiskIn)*pow(dop*gfac,4.0), uRealism);
-  // aynı Novikov–Thorne sıcaklık profili (bkz. sampleDisk)
-  float xIn = uDiskIn/max(rr, uDiskIn);
-  float tRel = 2.77 * pow(xIn, 0.75) * pow(max(1.-sqrt(xIn), 0.), 0.25) * dop * gfac;
-  c = mix(diskRamp(rr), bbRamp(tRel), uRealism);
+  // sanatsal kaymasız (bkz. sampleDisk): zincir yalnız gerçekçi modda koşar.
+  // HOIST DENENDİ VE REDDEDİLDİ: kesişimin shift/tRel'ini 4 atmosfer örneğine
+  // paylaştırmak (örnekler ışın boyunca ±su kayık) gerçekçi modda piksellerin
+  // %0.68'ini 4/255'ten fazla değiştiriyordu — kaliteden ödün.
+  boost = 1.0;
+  c = diskRamp(rr);
+  if(${P_REALISM}uRealism > 0.001){
+    float shift, tRel;
+    shiftAt(rr, hp, vn, shift, tRel);
+    boost = mix(1.0, 0.16*(2.35/uDiskIn)*pow(shift, 4.0), uRealism);
+    c = mix(c, bbRamp(tRel), uRealism);
+  }
   ${P_SHADE_CLOSE}
   float E = D * gz * (ds/H) * 0.5 * boost * (0.85 + 2.2*uEff);
   E *= uDiskGlow * diskFlicker(rr) * diskPatchF(hp.xz, rr, lump);
