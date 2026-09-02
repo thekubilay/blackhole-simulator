@@ -272,8 +272,50 @@ GÖREMEZ; `"thermals"` kaynağı spesifikasyonda var ama Chrome'da yok. Doğrula
 (M1 Pro, "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro)"): sınıf entegre →
 Dengeli 10 → tavan yüksek; pil → 7.5; Sessiz → 7 (yüksek 5.28 sığar); Sessiz +
 25 sn `fair` → 1 kademe düşüş, HUD 'iyi'; `nominal` sonrası düşüş 5 dk korunur.
-DEV kancaları: `__guc` (politika), `__lab.power` (anlık görüntü), `__butce`.
+DEV kancaları: `__guc` (politika), `__lab.power` (anlık görüntü), `__butce`,
+`__lab.sim` (simülasyon; parçalanma/parçacık yolunu tetiklemek için).
 Mod kalıcı DEĞİL (projede localStorage deseni yok; her açılışta cihaz sınıfı).
+
+## 10. v1.2.1 incelemesi — yerinde kontrol (2026-09-02 gece)
+
+Kod satır satır, çalışma zamanı ölçümle. Bulgular ve yapılanlar:
+
+| bulgu | kanıt | düzeltme |
+|---|---|---|
+| Gemi MSAA hedefi her karede yeniden ayrılıyordu | oyunda `rt.setSize` **2.33/sn** (192 → 512 → 160 px salınımı); three `setSize` = dispose + yeniden ayırma | histerezis: anında büyü, alanın yarısının altında 90 kare kalınca küçül → **0.27/sn** |
+| Probe ölçüm ortasında `?butce=0`/`setBudget(0)` gelirse governor askıda kalırdı | kod okuması (`setSuspended(true)` yalnız `finish`te kalkıyordu) | `setBudget(0)` askıyı kaldırır |
+| Sürükleyerek boyutlandırmada her ara boyutta yeniden ölçüm (25 ağır kare) | kod okuması: `done` dalı her karede %20 sapmada `restart` | sapma 60 ardışık kare sürmeli |
+| Lens dürtme kapanışı yeniden bağlanan materyalde bayat uniform'a yazardı (StrictMode/HMR) | kod okuması | kapanış `material.current`'ı çağrı anında okur |
+| `setCeiling` cezalı kademeye yukarı sıçrıyordu (FPS ağı ile salınım riski) | kod okuması | yukarı taşıma yalnız `cool[i] <= 0` ise |
+| `LabController.attachPower` iki aşamalı kurulum (governor kurucudan enjekte, power sonradan) | DIP tutarsızlığı | kurucu parametresi |
+| ShipPass her karede Points'lerin katmanını DEĞİŞTİRİYORDU (render geçişi sahne grafiğini mutasyona uğratıyor, SRP) | kod okuması | katmanın sahibi `Simulation.particleLayer` (App kurar); ShipPass yalnız okur, yanlış katmanda Points görürse DEV'de bir kez uyarır |
+
+**Bellek (sızıntı yok):** laboratuvar 30 sn — doku 9, geometri 2, program 5 sabit,
+heap 53-56 MB testere (GC). Oyun 15 sn — doku 11 sabit, geometri 8 → 9/10 ve
+program 7 → 8 TEK SEFERLİK (oyun nesneleri/ilk malzeme derlemesi), heap düz.
+RT `setSize` three'de `dispose()` çağırır: GPU kaynağı serbest kalır (kaynak
+`RenderTarget.setSize`). Sensör dinleyicileri ve `PressureObserver` PostFx
+effect'inin cleanup'ında kaldırılıyor.
+
+**Kalan varsayımlar (bilinçli):** probe açılış dolly'sinin başında ölçer (uzak
+kadraj); model oranları (0.25 bloom, 0.27 çıktı) M1'den; `?kalite=` pinliyken
+probe yine ~25 ağır kare koşar (ölçüm oturumları 15 sn bekliyor, `?butce=0`
+kapatır); kamera arkasına düşen köşe → tam ekran hedef (eski maliyet, tek kare).
+Parçacık (kıvılcım) yolu varsayılan delikte (Sgr A*, breakR = 0) hiç
+tetiklenmez; oyunda pod simülasyon adımına girmez (GameController yönetir).
+**Sınandı** laboratuvarda: `__lab.sim.spawn('pod', v, 'fall')` + `obj.dissolving
+= true` → Points katman maskesi 4, görünür, toplamalı; kare başına 13 render
+çağrısı ve sıra: lens · bloom ×7 · kompozit · **derinlik ön geçişi (override)** ·
+gemi hedefi · gemi quad'ı · **parçacıklar (katman 4)**. Pod ölüp sahneden
+çıkınca gemi hedefi atlanır (11), akış da temizlenince 9. GL hatası 0, DEV
+uyarısı yok.
+
+**Bulunup DÜZELTİLMEYEN (bilinçli):** App.tsx'teki URL pini ayrıştırması
+(kalite, fps, delik, bloom, tablo, b2, fon, aa, gemiaa, butce) tek fonksiyona
+toplanabilir (OCP); `?kalite=` pinliyken probe'un ağır kareleri; mod
+kalıcılığı. Kod yavaşlatan bir kalıp bulunmadı: kare başına ek iş `traverseVisible`
+(onlarca nesne), 8 köşe projeksiyonu/mesh, `PowerPolicy.tick` (birkaç
+karşılaştırma), `probe.frame` (aritmetik).
 
 ## 8. Ayrıca
 

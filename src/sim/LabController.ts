@@ -47,8 +47,7 @@ export class LabController implements LabCommands, SnapshotSource {
   private realistic = false
   private resetSeq = 0
   private fpsCap: 60 | 120 = 60
-  /** güç politikası; App.tsx kuruluşta bağlar (attachPower), yoksa pinsiz varsayılan */
-  private power: PowerPolicy = new PowerPolicy(null)
+  private readonly power: PowerPolicy
   private hint = ASTRONAUT_ENABLED
     ? 'Astronot hazır — bırakmak için disk düzleminde bir noktaya tıkla.'
     : 'Sahneyi keşfet — sürükleyerek döndür, tekerlek/iki parmakla yaklaş.'
@@ -63,6 +62,7 @@ export class LabController implements LabCommands, SnapshotSource {
     presets: Readonly<Record<string, BlackHolePreset>>,
     initialPresetId: string,
     initialFpsCap: 60 | 120 = 60,
+    power: PowerPolicy = new PowerPolicy(null),
   ) {
     this.sim = sim
     this.governor = governor
@@ -70,6 +70,7 @@ export class LabController implements LabCommands, SnapshotSource {
     this.presets = presets
     this.preset = presets[initialPresetId]
     this.fpsCap = initialFpsCap
+    this.power = power
     this.governor.setFrameCap(initialFpsCap)
     this.snap = this.buildSnapshot()
   }
@@ -77,12 +78,6 @@ export class LabController implements LabCommands, SnapshotSource {
   /** Kare döngüsünün canlı okuduğu tavan (FrameLoopDriver). */
   get frameCap(): number {
     return this.fpsCap
-  }
-
-  /** Güç politikasını bağlar (App.tsx, ?butce= pini ile kurulur). */
-  attachPower(power: PowerPolicy): void {
-    this.power = power
-    this.snap = this.buildSnapshot()
   }
 
   setPowerMode(mode: PowerMode | null): void {
@@ -123,6 +118,8 @@ export class LabController implements LabCommands, SnapshotSource {
         timeScale: this.timeScale,
         simTime: this.simTime,
         power: this.power.snapshot,
+        // sim referansı: parçacık/parçalanma yollarını konsoldan tetiklemek için
+        sim: this.sim,
       }
     }
     if (dtSim > 0) this.sim.step(dtSim)

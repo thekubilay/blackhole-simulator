@@ -16,6 +16,7 @@ import { FrameLoopDriver } from './scene/FrameLoopDriver'
 import { QualityManager } from './scene/QualityManager'
 import { LensedBackground } from './scene/LensedBackground'
 import { PostFx } from './scene/PostFx'
+import { PARTICLE_LAYER } from './scene/shipPass'
 import { HorizonOccluders } from './scene/HorizonOccluders'
 import { Lights } from './scene/Lights'
 import { SimulationLayer } from './scene/SimulationLayer'
@@ -37,9 +38,19 @@ export default function App() {
     const governor = new QualityGovernor(window.devicePixelRatio, coarsePointer, pin)
     const initial = PRESETS[DEFAULT_PRESET_ID]
     const sim = new Simulation(initial.engine, BODY_REGISTRY, initial.profile)
+    // kıvılcım akışları (toplamalı Points) gemi MSAA hedefine girmez; render
+    // hattının katmanını kompozisyon kökü verir (bkz. shipPass.ts)
+    sim.particleLayer = PARTICLE_LAYER
     // ?fps=120 → kare tavanı pinli başlar (test/ölçüm; HUD'dan da değişir)
     const fpsCap = params.get('fps') === '120' ? 120 : 60
-    const controller = new LabController(sim, governor, BODY_REGISTRY, PRESETS, DEFAULT_PRESET_ID, fpsCap)
+    // ?butce=<ms> → GPU-meşgul bütçesini PİNLER (ölçüm aracı; güç modu, pil ve
+    // basınç tepkisi devre dışı). 0 = açılış ölçümü kapalı, eski FPS-tek davranış.
+    // Pinsizken bütçeyi PowerPolicy verir: cihaz sınıfından varsayılan mod
+    // (sessiz 7 / dengeli 10 / performans 14 ms), pilde ×0.75, sistem basıncı
+    // (Compute Pressure) kademe düşürür; HUD'dan elle mod seçilir.
+    const butceRaw = params.get('butce')
+    const power = new PowerPolicy(butceRaw === null ? null : Math.max(0, Number(butceRaw) || 0))
+    const controller = new LabController(sim, governor, BODY_REGISTRY, PRESETS, DEFAULT_PRESET_ID, fpsCap, power)
     // ?delik=sgra|ss433|grs1915|3c273|cygx1 → o delikle açılır (ölçüm/paylaşım)
     const hole = params.get('delik')
     if (hole && PRESETS[hole]) controller.setHole(hole)
@@ -71,14 +82,6 @@ export default function App() {
     // Bağlam özniteliği çalışma anında değişmez; yalnız yüklenişte okunur.
     const aa = params.get('aa') === '1'
     const shipMsaa = params.get('gemiaa') !== '0'
-    // ?butce=<ms> → GPU-meşgul bütçesini PİNLER (ölçüm aracı; güç modu, pil ve
-    // basınç tepkisi devre dışı). 0 = açılış ölçümü kapalı, eski FPS-tek davranış.
-    // Pinsizken bütçeyi PowerPolicy verir: cihaz sınıfından varsayılan mod
-    // (sessiz 7 / dengeli 10 / performans 14 ms), pilde ×0.75, sistem basıncı
-    // (Compute Pressure) kademe düşürür; HUD'dan elle mod seçilir.
-    const butceRaw = params.get('butce')
-    const power = new PowerPolicy(butceRaw === null ? null : Math.max(0, Number(butceRaw) || 0))
-    controller.attachPower(power)
     return { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa, power }
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır

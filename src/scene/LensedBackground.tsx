@@ -92,8 +92,11 @@ export function LensedBackground({
     // tekilleştirmesin diye her tekrar öncesi uTime kıpırdatılır (bir sonraki
     // karede simTime yeniden yazılır, iz kalmaz). Bkz. budgetProbe.ts.
     if (pipeline && !pipeline.hasLensNudge) {
+      // kapanış `uniforms` yerelini DEĞİL ref'i okur: materyal yeniden bağlanırsa
+      // (StrictMode/HMR) eski uniform nesnesine değil güncel olana dürter
       pipeline.setLensNudge(() => {
-        uniforms.uTime.value += 1e-3
+        const u = material.current?.uniforms as LensUniforms | undefined
+        if (u) u.uTime.value += 1e-3
       })
     }
     camera.updateMatrixWorld()

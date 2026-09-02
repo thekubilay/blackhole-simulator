@@ -40,11 +40,18 @@ import * as THREE from 'three'
  * 32 px adımlara yuvarlanır ki hedef her karede yeniden ayrılmasın.
  */
 
-/** Toplamalı parçacık akışlarının katmanı; ShipPass her karede Points'lere basar. */
+/**
+ * Toplamalı parçacık akışlarının katmanı. Sahibi SİMÜLASYON (Simulation.particleLayer,
+ * App kurar): ShipPass katmanı okur, sahne grafiğini DEĞİŞTİRMEZ. Katman 0'da kalan
+ * bir Points bu hattın hiçbir geçişine girmez — DEV'de bir kez uyarılır.
+ */
 export const PARTICLE_LAYER = 2
 
 const PAD_PX = 6
 const QUANT = 32
+/** hedef küçülmeden önce gereken kutu bu kadar kare boyunca alanın yarısından küçük kalmalı */
+const SHRINK_FRAMES = 90
+const SHRINK_AREA = 0.5
 
 const COMPOSITE_VERTEX = /* glsl */ `
 uniform vec4 uRect;   // NDC: x0, y0 (alt-sol), x1, y1 (üst-sağ)
@@ -74,10 +81,14 @@ export class ShipPass {
   private readonly depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false })
   private rtW = 0
   private rtH = 0
+  /** küçük kutu bu kadar ardışık karedir; SHRINK_FRAMES'i geçince hedef küçülür */
+  private smallFrames = 0
 
   private readonly sphere = new THREE.Sphere()
   private readonly corner = new THREE.Vector3()
   private readonly clearColor = new THREE.Color()
+  private readonly particleLayers = new THREE.Layers()
+  private warnedStrayPoints = false
 
   constructor(renderer: THREE.WebGLRenderer) {
     this.renderer = renderer
@@ -107,6 +118,7 @@ export class ShipPass {
     this.quad.frustumCulled = false
     this.quadScene = new THREE.Scene().add(this.quad)
     this.quadCamera = new THREE.Camera()
+    this.particleLayers.set(PARTICLE_LAYER)
   }
 
   /**
@@ -126,8 +138,11 @@ export class ShipPass {
     scene.traverseVisible((o) => {
       const pts = o as THREE.Points
       if (pts.isPoints) {
-        pts.layers.set(PARTICLE_LAYER)
-        hasParticles = true
+        if (pts.layers.test(this.particleLayers)) hasParticles = true
+        else if (import.meta.env.DEV && !this.warnedStrayPoints) {
+          this.warnedStrayPoints = true
+          console.warn('[shipPass] Points PARTICLE_LAYER dışında — çizilmez. Simulation.particleLayer kuruldu mu?')
+        }
         return
       }
       const mesh = o as THREE.Mesh
@@ -199,13 +214,30 @@ export class ShipPass {
       if (x1 <= x0 || y1 <= y0) return
       w = Math.min(Math.ceil((x1 - x0) / QUANT) * QUANT, fullW)
       h = Math.min(Math.ceil((y1 - y0) / QUANT) * QUANT, fullH)
-      x = Math.min(x0, fullW - w)
-      y = Math.min(y0, fullH - h)
+      // HİSTEREZİS: hedef anında büyür, küçülmek için acele etmez. Gemi dönerken
+      // kutu her karede değişir; her değişimde setSize = MSAA renk + derinlik +
+      // çözümleme dokusunu yeniden ayırmak. ÖLÇÜLDÜ: histerezissiz oyunda
+      // saniyede 2.3 yeniden ayırma (192 → 512 → 160 px salınımı). Şimdi hedef
+      // gerekenden büyük kalabilir; görünüm ve kompozit hedefin boyutunu kullanır,
+      // fazlalık yalnız biraz daha geniş bir çözümleme blit'idir.
+      const growW = w > this.rtW, growH = h > this.rtH
+      if (!growW && !growH) {
+        const small = w * h < SHRINK_AREA * this.rtW * this.rtH
+        this.smallFrames = small ? this.smallFrames + 1 : 0
+        if (this.smallFrames < SHRINK_FRAMES) {
+          w = this.rtW
+          h = this.rtH
+        } else this.smallFrames = 0
+      } else this.smallFrames = 0
+      w = Math.min(w, fullW)
+      h = Math.min(h, fullH)
+      x = Math.max(0, Math.min(x0, fullW - w))
+      y = Math.max(0, Math.min(y0, fullH - h))
     }
     if (w !== this.rtW || h !== this.rtH) {
       this.rtW = w
       this.rtH = h
-      this.rt.setSize(w, h)
+      this.rt.setSize(w, h) // three: dispose + yeniden ayırma
     }
 
     renderer.getClearColor(this.clearColor)

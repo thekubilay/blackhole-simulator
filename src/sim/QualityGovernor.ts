@@ -203,6 +203,10 @@ export class QualityGovernor {
     const i = Math.max(0, Math.min(Math.floor(index), this.levels.length - 1))
     this.ceiling = i
     if (this.pinned || this.level === i) return
+    // Yukarı taşıma yalnız o kademe cezalı DEĞİLSE: FPS ağı orayı az önce
+    // sürdürülemez bulduysa (yeniden ölçüm/mod değişimi ile) hemen geri sıçramak
+    // ağ ile bütçeyi salındırırdı; ceza bitince tick'in UP dalı zaten çıkar.
+    if (i < this.level && this.cool[i] > 0) return
     this.level = i
     this.stable = 0
     this.held = 0

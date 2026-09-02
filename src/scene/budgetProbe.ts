@@ -52,8 +52,10 @@ const ABOVE_CAP = 1.3
 const K1_TARGET_CAPS = 1.6
 const K_MIN = 2
 const K_MAX = 32
-/** bu oranda CSS piksel değişimi yeniden ölçüm ister */
+/** bu oranda CSS piksel değişimi yeniden ölçüm ister … */
 const RESIZE_RATIO = 0.2
+/** … ama ancak bu kadar kare (≈1 sn) boyunca sürerse (sürükleme bitmiş olsun) */
+const RESIZE_SETTLE_FRAMES = 60
 
 type Phase = 'off' | 'settle' | 'scout' | 'scout2' | 'p1' | 'p2' | 'done'
 
@@ -84,6 +86,9 @@ export class BudgetProbe {
   private k2 = 8
   private m1 = 0
   private cssMpixAtDone = 0
+  /** tuval boyutu sapması bu kadar ARDIŞIK kare sürmeli (sürükleyerek boyutlandırma
+   *  sırasında her ara boyutta yeniden ölçüm yapılmasın — ölçüm ~25 ağır kare) */
+  private resizedFrames = 0
   /** son ölçüm karesinin dt'si bir sonraki karede gelir: ağ ondan sonra kalkar */
   private pendingResume = false
   /** son ölçüm (DEV konsolu / `__butce`) */
@@ -117,6 +122,9 @@ export class BudgetProbe {
     const wasOff = this.budgetMs <= 0
     this.budgetMs = ms
     if (ms <= 0) {
+      // ölçüm ortasında kapatılırsa ağ askıda kalmasın
+      this.governor.setSuspended(false)
+      this.pendingResume = false
       this.phase = 'off'
       this.governor.setCeiling(0)
       return
@@ -162,7 +170,12 @@ export class BudgetProbe {
         this.governor.setSuspended(false)
       }
       const cssMpix = this.cssMpix(mpix)
-      if (Math.abs(cssMpix - this.cssMpixAtDone) > RESIZE_RATIO * this.cssMpixAtDone) this.restart()
+      const resized = Math.abs(cssMpix - this.cssMpixAtDone) > RESIZE_RATIO * this.cssMpixAtDone
+      this.resizedFrames = resized ? this.resizedFrames + 1 : 0
+      if (this.resizedFrames >= RESIZE_SETTLE_FRAMES) {
+        this.resizedFrames = 0
+        this.restart()
+      }
       return (this.lastRepeats = 1)
     }
 

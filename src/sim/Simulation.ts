@@ -93,6 +93,13 @@ export class Simulation {
   private readonly mTmp = new THREE.Matrix4()
   private time = 0
   private emberScale = 700
+  /**
+   * Kıvılcım akışlarının (Points, toplamalı harman) sahne grafiği katmanı.
+   * Kompozisyon kökü (App) render hattının katmanını verir: gemi geçişi
+   * (scene/shipPass.ts) toplamalı parçacıkları kırpılmış MSAA hedefe DEĞİL
+   * doğrudan tuvale çizer ve onları bu katmandan tanır. 0 = ayrım yok.
+   */
+  particleLayer = 0
 
   constructor(engine: GeodesicEngine, registry: BodyRegistry, profile: HoleProfile) {
     this.engine = engine
@@ -213,6 +220,7 @@ export class Simulation {
     const parts: DebrisParticle[] = Array.from({ length: cap }, () => ({ st: null, live: false, age: 1 }))
     const stream = createEmberStream(cap)
     stream.material.uniforms.uScaleH.value = this.emberScale
+    stream.pts.layers.set(this.particleLayer)
     this.root.add(stream.pts)
     const system: DebrisSystem = { parts, stream, idx: 0, owner }
     this.debris.push(system)
