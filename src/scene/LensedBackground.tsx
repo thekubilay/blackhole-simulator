@@ -77,7 +77,7 @@ export function LensedBackground({
   // karşılaştırması delik değişimini bedelsiz yakalar
   const appliedVisual = useRef<HoleVisual | null>(null)
   // DEV ölçüm kancası; kimliği sabit kalsın diye ref'te tutulur (aşağıya bak)
-  const devHook = useRef<{ b2?: number; time?: number; uniforms?: LensUniforms }>({})
+  const devHook = useRef<{ b2?: number; time?: number; probe?: number; uniforms?: LensUniforms }>({})
   useFrame(({ camera }) => {
     const uniforms = material.current?.uniforms as LensUniforms | undefined
     if (!uniforms) return
@@ -119,6 +119,8 @@ export function LensedBackground({
       // döndüğü için iki ardışık kare kendiliğinden %31 piksel farkı verir ve
       // yol farkı o gürültünün altında kaybolur.
       if (dev.time !== undefined) uniforms.uTime.value = dev.time
+      // `__lens.probe = 1..4` bütçe kalemlerini tek tek kapatır (lensShader PROBE)
+      uniforms.uProbe.value = dev.probe ?? 0
       dev.uniforms = uniforms
     }
     // deliğe özgü GERÇEK türetimler: disk iç kenarı = ISCO, verim η = 1 − E_ISCO

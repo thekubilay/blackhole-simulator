@@ -7,6 +7,36 @@ varying vec2 vUv;
 void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }
 `
 
+/**
+ * BÜTÇE ÖLÇÜM ANAHTARI — YALNIZ DEV'DE DERLENİR (üretimde hepsi boş string,
+ * sevk edilen shader değişmez).
+ *
+ * NİYE VAR: B3'ten sonra tek bir şişman kalem kalmadı; bütçe beşe altıya
+ * bölündü ve hangi işin ne kadar tuttuğunu ancak KAPATIP ölçerek bilebiliyoruz.
+ * Konsoldan `__lens.probe = n`:
+ *   1 = disk gürültüsü sabite (fbm zinciri koşmaz)
+ *   2 = atmosfer örnekleri hiç alınmaz
+ *   3 = yıldız + bulutsu fonu siyah
+ *   4 = üçü birden
+ * Ölçülen paylar (M1 Pro, 8.2 Mpix, 'yüksek', toplam 18.4 ms): gürültü 2.9,
+ * atmosfer 3.1, yıldız 0.9 — tek tek toplamları birlikte ölçümüne EŞİT
+ * (6.9), yani kalemler bağımsız. Geri kalan 8.3 ms (%45) HENÜZ AYRIŞTIRILMADI.
+ *
+ * YENİ PROBE EKLERKEN: aşağıya bir sabit daha ekle ve shader'da tek satırlık
+ * `${...}` olarak enjekte et. Uniform dallanması olduğu için iki dal da
+ * derlenir ve warp'ın tamamı aynı dalı alır — ölçüm gerçek maliyeti verir.
+ *
+ * ÖLÇÜM ŞARTI: `scripts/olcum-protokolu.md`. Kısaca — kare tavanına çarparsan
+ * hiçbir şey ölçmezsin (?fps=120 = 8.33 ms'lik yuva), önce setPixelRatio ile
+ * yükü tavanın ÜSTÜNE çıkar.
+ */
+const PROBE = import.meta.env.DEV
+const P_DECL = PROBE ? 'uniform float uProbe;' : ''
+const P_NOISE_OPEN = PROBE ? 'if(uProbe == 1.0 || uProbe == 4.0){ n = 0.5; } else {' : ''
+const P_NOISE_CLOSE = PROBE ? '}' : ''
+const P_ATMO = PROBE ? 'if(uProbe == 2.0 || uProbe == 4.0) return;' : ''
+const P_STARS = PROBE ? 'if(uProbe == 3.0 || uProbe == 4.0) return vec3(0.);' : ''
+
 export const LENS_FRAGMENT = /* glsl */ `
 precision highp float;
 varying vec2 vUv;
@@ -45,6 +75,7 @@ mat2 rot(float a){
   a = mod(a, TAU);
   float c=cos(a),s=sin(a);return mat2(c,-s,s,c);
 }
+${P_DECL}
 float hash12(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 /**
  * (p, v) durumundan SONSUZA kalan ışın bükülmesinin kapalı formu.
@@ -100,6 +131,7 @@ vec3 cubeUV(vec3 d, out float aMax){
   aMax = max(ad.z, 1e-6);           return vec3(d.xy/aMax, d.z > 0. ? 4. : 5.);
 }
 vec3 stars(vec3 rd){
+  ${P_STARS}
   vec3 col=vec3(0.);
   // iki ölçekli bulutsu: ince pus + büyük kabuk/filaman yapısı. Alan yalnız
   // YÖNÜN fonksiyonu ve zamandan bağımsızdır ⇒ açılışta bir kez küp haritasına
@@ -187,6 +219,7 @@ void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
   // blend bandının (3.2–8.5) dışında maliyet yarıya iner, sonuç birebir aynı
   float w = smoothstep(3.2, 8.5, rr);
   float n = 0.;
+  ${P_NOISE_OPEN}
   if(w < 0.999){
     vec2 qA = rot(uTime*0.045 + spiral) * hxz;
     n = 0.50*fbm(qA*1.35) + 0.32*fbm3(qA*3.6) + 0.18*fbm3(qA*7.4);
@@ -196,6 +229,7 @@ void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
     float nB = 0.50*fbm(qB*1.35 + 31.7) + 0.32*fbm3(qB*3.6 + 11.3) + 0.18*fbm3(qB*7.4 + 5.9);
     n = (w < 0.999) ? mix(n, nB, w) : nB;
   }
+  ${P_NOISE_CLOSE}
   float streak = 0.5 + 0.5*sin(rr*6.5 + n*8.0);
   // ince taneli filaman bantları (yalnız ALU — ek gürültü örneklemesi yok):
   // referans görüntüdeki tozlu, çizgili disk dokusunu verir
@@ -256,6 +290,7 @@ void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
 // silueti ve iç kenardaki bulut simidini verir. Sıyıran ışında bile maliyet
 // segment başına 1 örnektir — doku ortalamaya girip lapalaşmaz
 void sampleAtmo(vec3 hp, vec3 vn, float H, float ds, inout vec4 acc){
+  ${P_ATMO}
   float rr = length(hp.xz);
   if(rr < uDiskIn || rr > R_OUT) return;
   float gz = exp(-(hp.y*hp.y)/(H*H));
@@ -865,6 +900,8 @@ export type LensUniforms = {
   uNebTex: THREE.IUniform<THREE.CubeTexture | null>
   /** 0 = doğrusal HDR çıkış (bloom hattı devrede), 1 = shader kendi ton eşlemesini yapar */
   uToneMap: THREE.IUniform<number>
+  /** DEV bütçe ölçüm anahtarı; üretimde shader'da karşılığı yok (bkz. PROBE) */
+  uProbe: THREE.IUniform<number>
   uJetA: THREE.IUniform<THREE.Vector4>
   uJetB: THREE.IUniform<THREE.Vector4>
   uJetC: THREE.IUniform<THREE.Vector4>
@@ -894,6 +931,7 @@ export function createLensUniforms(): LensUniforms {
     uNebPar: { value: new THREE.Vector2(1, 1) },
     uNebTex: { value: null },
     uToneMap: { value: 1 },
+    uProbe: { value: 0 },
     uJetA: { value: new THREE.Vector4(0, 0, 0, 0) },
     uJetB: { value: new THREE.Vector4(0, 0, 0, 0) },
     uJetC: { value: new THREE.Vector4(0, 0, 0, 0) },
