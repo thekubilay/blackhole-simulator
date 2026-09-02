@@ -117,6 +117,32 @@ shader'ında karşılıkları yoktur (paket kontrol edildi: GLSL'de `uProbe` yok
 | 9 | sampleAtmo'nun gölgeleme zinciri sabit renge, 4×/kesişim (6 + 9 = 5× toplam) |
 | 10 | main'in ilk satırında siyah: TABAN (quad + HDR hedefi + bloom + MSAA + tuval; shader ALU'su sıfır) |
 | 11 | disk/atmosfer gürültüsü pişirilmiş dokudan değil ALU hash'inden (eski yol; noiseBake A/B) |
+| 12 | biriken EMİSYON alfası (acc.a) gri harita — beyaz = opak |
+| 13 | yalnız gökyüzünün diske sızan payı (1−acc.a)·bg |
+| 14 | gökyüzü ÖRTMESİ kapalı (occ = 0, eski davranış) — yıldız sızması A/B'si |
+
+**YILDIZLAR DİSKİN ÜSTÜNDE GÖRÜNÜYORDU (2026-09-02, kullanıcı bildirdi):**
+Teşhis probe 12 ile: diskin dokunduğu 891 bin pikselin **%85.5'inde acc.a < 0.1**
+(ortalama 0.052, tepe 0.92) — disk gökyüzünü neredeyse hiç örtmüyor, yıldızlar
+bandın içinden ~%95 parlaklıkla geçiyor ve "üstüne serpilmiş" duruyordu.
+
+**YANLIŞ İLK DENEME (geri alındı):** `acc.a`'yı yoğunluktan türetip yükseltmek.
+Yıldızları kesti ama diskin sönük dış bölgesinde arka planın verdiği dolguyu da
+kesti — kadrajın alt yarısı karardı, kullanıcı reddetti. DERS: `acc.a` EMİSYON
+transferidir (disk katmanları + lens görüntüleri arası); onu yükseltmek
+"örtme"den fazlasını yapar.
+
+**DOĞRU ÇÖZÜM:** örtme, emisyon alfasından AYRI bir kanal (`occ`, sampleDisk ve
+sampleAtmo'da birikir) ve yalnız NOKTASAL yıldızları söndürür (`stars(rd,
+starVis)`); difüz bulutsu korunur. Örtme geometriden gelir (bant kapsaması +
+bulut dokusu), emisyondan değil — sönük dış disk de arkasını gizler.
+Ölçüm (aynı kare, probe 0 vs 14, 318 bin disk pikseli):
+
+| | örtmesiz | örtmeli |
+|---|---|---|
+| disk bandı ortalama parlaklık | 0.3535 | 0.3528 (−%0.2, kararma YOK) |
+| kaldırılan yıldız ışığı (ortalama / tepe) | — | 0.00073 / 1.02 |
+| yıldızın düştüğü piksel oranı (>%5) | — | %0.89 |
 
 **%45'lik "kalan"ın ayrıştırılması (2026-09-02, M1 Pro, 8.31 Mpix, ref ≈ 19.5 ms;
 paylar aynı pencerenin referansına göre):**

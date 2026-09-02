@@ -29,6 +29,15 @@ export function HudStrip({ s, lab }: { s: LabSnapshot; lab: LabCommands }) {
   return (
     <>
       <div className="card hud">
+        {/* başa sarma: eskiden sol alt köşedeydi, HUD'un en soluna alındı —
+            sahne araçları tek yerde toplansın */}
+        <button
+          className="icon-btn hud-rewind"
+          onClick={() => lab.rewind()}
+          aria-label="Sahneyi başa sar"
+        >
+          <i className="fa-regular fa-arrow-rotate-right" aria-hidden="true" />
+        </button>
         <Stat k="FPS" v={s.fps} onClick={() => setPop('fps')} />
         <Stat k="KALİTE" v={s.quality} onClick={() => setPop('kalite')} />
         <Stat k="SPİN a*" v={s.hole.spinLabel} onClick={() => setPop('spin')} />

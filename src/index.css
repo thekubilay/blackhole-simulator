@@ -83,7 +83,18 @@ a:hover {
   font-size: 17px;
   letter-spacing: 0.14em;
   line-height: 1.3;
-  color: #ffb877;
+  /* marka artık beyaz: amber logo diskin altın bandına karışıyordu */
+  color: #fff;
+}
+/* KARA 500 · DELİK 400 · LAB. 300 — kelime ağırlıkları markanın ritmi */
+.title .w5 {
+  font-weight: 500;
+}
+.title .w4 {
+  font-weight: 400;
+}
+.title .w3 {
+  font-weight: 300;
 }
 .title .thin {
   font-weight: 300;
@@ -111,11 +122,12 @@ a:hover {
   font-weight: 300;
   font-size: 10px;
   letter-spacing: 0.2em;
-  color: var(--ink-muted);
+  /* markayla aynı beyaz, bir tık kısık: hiyerarşi renk değil opaklıkla kurulur */
+  color: rgba(255, 255, 255, 0.72);
   white-space: nowrap;
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85);
 }
-/* sol alt köşe araçları: kontrol dialogu + başa sarma, üst üste */
+/* sol alt köşe: dokunmatikte ayarlar butonu, klavyeli cihazda ESC ipucu */
 .corner-tools {
   position: fixed;
   left: var(--edge-l);
@@ -127,6 +139,21 @@ a:hover {
 }
 .corner-tools button {
   pointer-events: auto;
+}
+/* "ESC ile ayarlar menüsü" — butonun yerini alan ipucu satırı */
+.esc-hint {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .ui .icon-btn {
   border: none;
@@ -350,10 +377,21 @@ a:hover {
   top: var(--edge-t);
   right: var(--edge-r);
   display: flex;
+  align-items: center;
   gap: 16px;
   padding: 8px 14px;
   border-radius: 14px;
   border: none;
+}
+/* HUD'un en solundaki başa sarma: hücrelerle aynı yükseklikte, kromsuz */
+.ui .hud .hud-rewind {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border-radius: 8px;
+}
+.ui .hud .hud-rewind:hover {
+  background: rgba(255, 154, 77, 0.16);
 }
 .stat {
   text-align: center;

@@ -73,6 +73,15 @@ const P_LOOP = PROBE ? 'if(uProbe == 7.0) break;' : ''
 const P_COMP = PROBE ? 'if(uProbe == 8.0){ gl_FragColor = vec4(col2, 1.); return; }' : ''
 const P_BLACK = PROBE ? 'if(uProbe == 10.0){ gl_FragColor = vec4(0., 0., 0., 1.); return; }' : ''
 const P_NOISE_ALU = PROBE ? 'if(uProbe == 11.0) return vnoiseA(p);' : ''
+// TEŞHİS (geçici olabilir): 12 = biriken alfa haritası (beyaz = opak),
+// 13 = YALNIZ gökyüzünün diske sızan payı (1−a)·bg — "yıldız diskin üstünde"
+// şikayetinin nerede doğduğunu gösterir.
+const P_ALPHA = PROBE ? 'if(uProbe == 12.0){ gl_FragColor = vec4(vec3(acc.a), 1.); return; }' : ''
+const P_SKY_B2 = PROBE ? 'if(uProbe == 13.0){ gl_FragColor = vec4((1.0 - acc.a)*bg2, 1.); return; }' : ''
+const P_SKY_M = PROBE ? 'if(uProbe == 13.0){ gl_FragColor = vec4((1.0 - acc.a)*bg, 1.); return; }' : ''
+// 14 = gökyüzü örtmesi KAPALI (eski davranış): yıldızların diskin arkasından
+// sızması aynı karede A/B ölçülebilsin diye.
+const P_OCC = PROBE ? 'if(uProbe != 14.0) ' : ''
 
 export const LENS_FRAGMENT = /* glsl */ `
 precision highp float;
@@ -176,7 +185,21 @@ vec3 cubeUV(vec3 d, out float aMax){
   if(ad.y >= ad.z){                 aMax = max(ad.y, 1e-6); return vec3(d.xz/aMax, d.y > 0. ? 2. : 3.); }
   aMax = max(ad.z, 1e-6);           return vec3(d.xy/aMax, d.z > 0. ? 4. : 5.);
 }
-vec3 stars(vec3 rd){
+/**
+ * Gökyüzü: difüz bulutsu + yıldız ızgarası.
+ *
+ * starVis: YILDIZ ızgarasının görünürlüğü (1 = açık gökyüzü, 0 = diskin
+ * arkasında tamamen örtülü). Disk optik olarak KALINDIR: arkasındaki noktasal
+ * kaynaklar görünmez. Bu ayrım şart, çünkü diskin biriken alfası (acc.a)
+ * EMİSYON transferi içindir ve ölçüldüğünde diskin dokunduğu piksellerin
+ * %85'inde 0.1'in altında kalıyor (ortalama 0.052) — yani yıldızlar bandın
+ * içinden neredeyse tam parlaklıkta geçiyor ve "diskin üstüne serpilmiş" gibi
+ * duruyordu. acc.a'yı yükseltmek yıldızları keserdi ama diskin sönük dış
+ * bölgesinde arka planın verdiği dolguyu da keser, kadraj kararırdı (denendi).
+ * Bu yüzden yalnız NOKTASAL yıldızlar örtülür; difüz bulutsu korunur — o zaten
+ * düşük frekanslı bir pus, göze batmaz ve karanlığı kaldırır.
+ */
+vec3 stars(vec3 rd, float starVis){
   ${P_STARS}
   vec3 col=vec3(0.);
   // iki ölçekli bulutsu: ince pus + büyük kabuk/filaman yapısı. Alan yalnız
@@ -204,7 +227,7 @@ vec3 stars(vec3 rd){
       float d = length(gv-off*.7);
       float s = smoothstep(.14,.0,d)*(h-thr)/(1.0-thr);
       float tw = .75+.25*sin(mod(uTime*(1.+h*2.)+h*40., TAU));
-      col += vec3(1.,.96,.9)*s*s*1.4*tw;
+      col += vec3(1.,.96,.9)*s*s*1.4*tw*starVis;
     }
   }
   return col;
@@ -250,7 +273,7 @@ float diskPatchF(vec2 xz, float rr, float n){
 }
 // hp: örnek noktası (y ≠ 0 olabilir — hacim örneği), H: yerel yarı kalınlık,
 // dsl: bu örneğin temsil ettiği ışın yolu uzunluğu (hacim entegrasyon ağırlığı)
-void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
+void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc, inout float occ){
   float rr = length(hp.xz);
   // dikey Gauss zarfı: gaz düzlemden uzaklaştıkça pamuksu söner
   float gz = exp(-(hp.y*hp.y)/(H*H));
@@ -332,13 +355,22 @@ void sampleDisk(vec3 hp, vec3 vn, float H, float dsl, inout vec4 acc){
   float aStep = 1. - pow(1. - aRaw, wv);
   acc.rgb += (1.-acc.a)*c*E*wv;
   acc.a  += (1.-acc.a)*aStep*.7;
+  // GÖKYÜZÜ ÖRTMESİ — emisyon alfasından AYRI. Optik derinlik τ = κΣ yüzey
+  // YOĞUNLUĞUYLA belirlenir; yüzey parlaklığı ise T⁴ ile r'de hızla düşer
+  // (E ∝ (r_in/r)^3.1). Örtme bu yüzden emisyondan değil GEOMETRİDEN (bant
+  // kapsaması) ve bulut dokusundan gelir: sönük dış disk de arkasındaki
+  // yıldızı gizler. Kenar profili emisyonunkinden ayrıdır — madde biter,
+  // ışıma sönmez.
+  float oFade = smoothstep(uDiskIn, uDiskIn + 0.3, rr) * smoothstep(R_OUT, R_OUT - 2.0, rr);
+  float oRaw = clamp(oFade * (0.55 + 0.45*smoothstep(0.10, 0.72, n)), 0., 0.995);
+  ${P_OCC}occ += (1. - occ) * (1. - pow(1. - oRaw, max(wv, 1e-3)));
 }
 // ucuz hacimsel "atmosfer": diskin üstünde/altında pamuksu gaz halesi.
 // Pahalı disk dokusu YOK (yalnız 2 vnoise oktavı) — keskin detay düzlem
 // kesişimindeki sampleDisk'te kalır; bu katman dikey dolgunluğu, tüylü
 // silueti ve iç kenardaki bulut simidini verir. Sıyıran ışında bile maliyet
 // segment başına 1 örnektir — doku ortalamaya girip lapalaşmaz
-void sampleAtmo(vec3 hp, vec3 vn, float H, float ds, inout vec4 acc){
+void sampleAtmo(vec3 hp, vec3 vn, float H, float ds, inout vec4 acc, inout float occ){
   ${P_ATMO}
   float rr = length(hp.xz);
   if(rr < uDiskIn || rr > R_OUT) return;
@@ -372,6 +404,8 @@ void sampleAtmo(vec3 hp, vec3 vn, float H, float ds, inout vec4 acc){
   E *= uDiskGlow * diskFlicker(rr) * diskPatchF(hp.xz, rr, lump);
   acc.rgb += (1.-acc.a)*c*E;
   acc.a  += (1.-acc.a)*clamp(E*.4,0.,.9)*.7;
+  // hale gerçekten yarı saydamdır (pamuksu gaz): yıldızı kısar, gizlemez
+  ${P_OCC}occ += (1. - occ) * clamp(D * gz * (ds/H) * 0.55, 0., 0.6);
 }
 // ---------------------------------------------------------------------------
 // JET — dönme ekseni (±y) boyunca kollime plazma huzmesi.
@@ -548,6 +582,8 @@ void main(){
   vec3 v = normalize(rd + (f0 - 1.)*dot(rd, pr)*pr);
   vec3 L = cross(p, v); float h2 = dot(L,L);
   vec4 acc = vec4(0.);
+  // gökyüzü örtmesi: diskin arkasındaki NOKTASAL yıldızları söndürür (bkz. stars)
+  float occ = 0.;
   // ── TABLO YOLU ────────────────────────────────────────────────────────
   // Marş yalnız HACİMLİ örnekleme gerçekten gerektiğinde koşar. Işın disk
   // bandına hiç değmiyorsa (kare payının büyük kısmı: yıldız/bulutsu) kaçış
@@ -709,11 +745,11 @@ void main(){
             float udk = sqrt(max(e2 + uk*uk*uk - uk*uk, 0.0)) * sgnk;
             vec3 vk = normalize(et - (udk/max(uk, 1e-6))*er);
             float Hh = diskH(rr);
-            if(rr > uDiskIn && rr < R_OUT) sampleDisk(hp, vk, Hh, 2.0*Hh, acc);
+            if(rr > uDiskIn && rr < R_OUT) sampleDisk(hp, vk, Hh, 2.0*Hh, acc, occ);
             if(rr > uDiskIn - 1.5 && acc.a < 0.95){
               float su = 0.85*Hh/clamp(abs(vk.y), 0.35, 1.0);
               for(int m = 0; m < 4; m++)
-                sampleAtmo(hp + vk*((float(m) - 1.5)*su), vk, Hh, su, acc);
+                sampleAtmo(hp + vk*((float(m) - 1.5)*su), vk, Hh, su, acc, occ);
             }
             if(acc.a > 0.99) break;
           }
@@ -723,14 +759,17 @@ void main(){
           // noktaya kadar yalnız B2 yazdı, sıfırlamak güvenli. 'march' burada
           // AÇIKÇA kurulur: yakalanan ışında zaten false'tu (B2 sahiplenmişti).
           acc = vec4(0.);
+          occ = 0.;
           march = true;
         } else {
         float minR2 = ud > 0.0 ? (e2 < KMU ? 1.0/uApsisT(e2) : 1.0) : r0;
         vec3 bg2 = vec3(0.);
         if(esc && acc.a < 0.985){
           float dp2 = delta + defl;
-          bg2 = stars(cos(dp2)*pr + sin(dp2)*ey)*mix(1.0, 0.12, uRealism);
+          bg2 = stars(cos(dp2)*pr + sin(dp2)*ey, 1.0 - occ)*mix(1.0, 0.12, uRealism);
         }
+        ${P_ALPHA}
+        ${P_SKY_B2}
         vec3 col2 = acc.rgb + (1.0 - acc.a)*bg2;
         ${P_COMP}
         if(esc){
@@ -746,7 +785,7 @@ void main(){
       if(!march){
         float dp = delta + defl;
         vec3 dEsc = cos(dp)*pr + sin(dp)*ey;
-        vec3 col = stars(dEsc)*mix(1.0, 0.12, uRealism);
+        vec3 col = stars(dEsc, 1.0 - occ)*mix(1.0, 0.12, uRealism);
         col += mix(vec3(1.,.5,.24), vec3(.75,.85,1.15), uRealism)
              * mix(0.05, 0.03, uRealism) * exp(-pow((minR-2.75)*1.15,2.));
         col += mix(vec3(1.05,.92,.75), vec3(.9,.95,1.2), uRealism)
@@ -785,7 +824,7 @@ void main(){
       // disk jetten öndeyse önce onu birikime kat (doğru ön-arka sıralama)
       if(t1 > t0 && td > 0. && td < t0){
         vec3 hp = p + v*td; float rr = length(hp.xz);
-        if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, v, Hh, 2.0*Hh, acc); }
+        if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, v, Hh, 2.0*Hh, acc, occ); }
         diskDone = true;
       }
       // Adım MESAFEYE göre seçilir (küre izleme benzeri): huzme ekseni her
@@ -804,7 +843,7 @@ void main(){
         if(!diskDone && td >= t && td < t + st){
           diskDone = true;
           vec3 hd = p + v*td; float rr = length(hd.xz);
-          if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hd, v, Hh, 2.0*Hh, acc); }
+          if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hd, v, Hh, 2.0*Hh, acc, occ); }
         }
         if(dd < 2.8*rj) sampleJet(hp, v, min(st, t1-t), acc);
         t += st;
@@ -813,12 +852,12 @@ void main(){
     if(!diskDone && td > 0.){
       vec3 hp = p + v*td;
       float rr = length(hp.xz);
-      if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, v, Hh, 2.0*Hh, acc); }
+      if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, v, Hh, 2.0*Hh, acc, occ); }
     }
     // pozlama ödünü: gerçekçi modda disk parlaklığı yıldızları bastırır.
     // Gökyüzü, ışının DÜZ yolu boyunca değil analitik zayıf alan sapmasıyla
     // örneklenir: yürüyen dalla eşikte örtüşür (yoksa b = 17'de çember görünür)
-    vec3 cf = acc.rgb + (1.-acc.a)*stars(weakBend(p, v))*mix(1.0, 0.12, uRealism);
+    vec3 cf = acc.rgb + (1.-acc.a)*stars(weakBend(p, v), 1.0 - occ)*mix(1.0, 0.12, uRealism);
     gl_FragColor = vec4(outColor(cf, ndc), 1.); return;
   }
   bool captured = false;
@@ -864,14 +903,14 @@ void main(){
       vec3 hp = mix(pPrev, p, t);
       float rr = length(hp.xz);
       vec3 vnn = normalize(v);
-      if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, vnn, Hh, 2.0*Hh, acc); }
+      if(rr>uDiskIn && rr<R_OUT){ float Hh = diskH(rr); sampleDisk(hp, vnn, Hh, 2.0*Hh, acc, occ); }
       if(rr>uDiskIn-1.5 && rr<R_OUT+0.5 && acc.a < 0.95){
         float Hh = diskH(rr);
         // sıyıran ışında ışın-boyu yayılım sınırlandırılır (doku lapalaşmasın)
         float su = 0.85*Hh/clamp(abs(vnn.y), 0.35, 1.);
         for(int k=0;k<4;k++){
           float s = (float(k)-1.5)*su;
-          sampleAtmo(hp + vnn*s, vnn, Hh, su, acc);
+          sampleAtmo(hp + vnn*s, vnn, Hh, su, acc, occ);
         }
       }
     }
@@ -916,7 +955,9 @@ void main(){
   // analitik eklenir. Erken çıkış çoğu ışında periyapsisin hemen ardında olur
   // ve tek başına sapmanın YARISINI atıyordu — düz dalla arasındaki fark bu.
   vec3 bg = (captured || lost || acc.a > 0.985) ? vec3(0.)
-          : stars(weakBend(p, normalize(v)))*mix(1.0, 0.12, uRealism);
+          : stars(weakBend(p, normalize(v)), 1.0 - occ)*mix(1.0, 0.12, uRealism);
+  ${P_ALPHA}
+  ${P_SKY_M}
   vec3 col = acc.rgb + (1.-acc.a)*bg;
   if(!captured){
     // bu iki terim KOZMETİKTİR (sanatsal halo) — gerçekçi modda bastırılır:

@@ -49,6 +49,17 @@ export function Overlay({ controller, game }: { controller: LabController; game:
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [g.active, g.briefing, g.phase, game])
+  // LAB modunda ESC ayarlar menüsünü AÇAR. Kapatmayı Dialog'un kendi ESC'i
+  // yapar (useKey) — bu yüzden burada yalnız kapalıyken dinleriz, yoksa aynı
+  // tuş vuruşu kapat+aç olup menüyü hiç kapatmaz.
+  useEffect(() => {
+    if (g.active || tab) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTab('delikler')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [g.active, tab])
   if (g.active) {
     const h = g.hud
     // oyun görünümü: lab UI'si çekilir — marka + çıkış + kenetlenme HUD'u
@@ -56,7 +67,8 @@ export function Overlay({ controller, game }: { controller: LabController; game:
       <div className="ui">
         <div className="brand">
           <div className="title">
-            KARA DELİK <span className="thin">LAB.</span>
+            <span className="w5">KARA</span> <span className="w4">DELİK</span>{' '}
+            <span className="w3">LAB.</span>
           </div>
           <div className="brand-sub">
             KENETLENME · {s.hole.name}
@@ -246,26 +258,32 @@ export function Overlay({ controller, game }: { controller: LabController; game:
       {/* logo + seçili delik adı: her zaman görünür */}
       <div className="brand">
         <div className="title">
-          KARA DELİK <span className="thin">LAB.</span>
+          <span className="w5">KARA</span> <span className="w4">DELİK</span>{' '}
+          <span className="w3">LAB.</span>
         </div>
         <div className="brand-sub">{s.hole.name}</div>
       </div>
-      {/* sol alt köşe araçları: ayarlar dialogu aç/kapa + tam başa sarma */}
+      {/* Sol alt: klavyeli cihazda ayarlar ESC ile açılır, buton yerine ipucu
+          durur (başa sarma HUD'un soluna taşındı). Dokunmatikte ESC yok —
+          orada buton tek giriş yolu, kalır. */}
       <div className="corner-tools">
-        <button
-          className="icon-btn"
-          onClick={() => setTab(tab ? null : 'delikler')}
-          aria-label={tab ? 'Ayarlar dialogunu kapat' : 'Ayarlar dialogunu aç'}
-        >
-          {/* FA kit <i>'yi SVG ile değiştirir; React'ın söküp yeniden kurabilmesi
-              için ikon, key'li ve React'a ait bir span içinde yaşar */}
-          <span key={tab ? 'x' : 'sliders'} style={{ display: 'contents' }}>
-            <i className={tab ? 'fa-regular fa-xmark' : 'fa-regular fa-sliders'} aria-hidden="true" />
-          </span>
-        </button>
-        <button className="icon-btn" onClick={() => controller.rewind()} aria-label="Sahneyi başa sar">
-          <i className="fa-regular fa-arrow-rotate-right" aria-hidden="true" />
-        </button>
+        {touch ? (
+          <button
+            className="icon-btn"
+            onClick={() => setTab(tab ? null : 'delikler')}
+            aria-label={tab ? 'Ayarlar dialogunu kapat' : 'Ayarlar dialogunu aç'}
+          >
+            {/* FA kit <i>'yi SVG ile değiştirir; React'ın söküp yeniden kurabilmesi
+                için ikon, key'li ve React'a ait bir span içinde yaşar */}
+            <span key={tab ? 'x' : 'sliders'} style={{ display: 'contents' }}>
+              <i className={tab ? 'fa-regular fa-xmark' : 'fa-regular fa-sliders'} aria-hidden="true" />
+            </span>
+          </button>
+        ) : (
+          <div className="esc-hint">
+            <kbd className="key">ESC</kbd> ile ayarlar menüsü
+          </div>
+        )}
       </div>
       {tab && (
         <Dialog onClose={() => setTab(null)} width="min(620px, 100%)">
