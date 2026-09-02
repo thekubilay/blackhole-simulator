@@ -36,6 +36,45 @@ export function classifyDevice(renderer: string, coarsePointer: boolean): { cls:
   return { cls: 'bilinmiyor', mode: 'dengeli' }
 }
 
+/**
+ * KALICILIK — yalnız güç modu, yalnız ELLE seçim. Kalite ve fps tavanı deneme
+ * ayarlarıdır, sıfırlanmaları doğal; güç modu cihazın fiziksel bir özelliğine
+ * (fan) verilen cevaptır — kullanıcı fanı bir kez duyup Sessiz'i seçti diye her
+ * açılışta yeniden seçmesin. Otomatik seçim saklanmaz (cihaz sınıfı her açılışta
+ * yeniden çözülür), `?butce=` pini her zaman ezer. Depolama engelliyse sessiz.
+ */
+const POWER_MODE_KEY = 'kdl.gucModu'
+const POWER_MODES: readonly PowerMode[] = ['sessiz', 'dengeli', 'performans']
+
+export function loadPowerMode(): PowerMode | null {
+  try {
+    const v = window.localStorage.getItem(POWER_MODE_KEY)
+    return v && (POWER_MODES as readonly string[]).includes(v) ? (v as PowerMode) : null
+  } catch {
+    return null
+  }
+}
+
+export function savePowerMode(mode: PowerMode | null): void {
+  try {
+    if (mode === null) window.localStorage.removeItem(POWER_MODE_KEY)
+    else window.localStorage.setItem(POWER_MODE_KEY, mode)
+  } catch {
+    /* depolama yok/engelli: kalıcılık yok, çalışma sürer */
+  }
+}
+
+/** Politikayı depoyla bağlar: açılışta elle seçimi yükler, değişimde yazar. Dönüş: iptal. */
+export function persistPowerMode(policy: PowerPolicy): () => void {
+  if (policy.snapshot.override !== null) return () => {}
+  const stored = loadPowerMode()
+  if (stored) policy.setMode(stored)
+  return policy.onChange(() => {
+    const s = policy.snapshot
+    savePowerMode(s.auto ? null : s.mode)
+  })
+}
+
 interface BatteryLike extends EventTarget {
   charging: boolean
 }

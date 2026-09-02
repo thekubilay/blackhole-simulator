@@ -24,65 +24,27 @@ import { SpawnPlane } from './scene/SpawnPlane'
 import { Overlay } from './ui/Overlay'
 import { RotateGate } from './ui/RotateGate'
 import { useGameSnapshot } from './hooks/useGameSnapshot'
+import { readPins } from './pins'
 
 /** Kompozisyon kökü: bağımlılıklar burada kurulur ve enjekte edilir (DIP). */
 export default function App() {
   const coarsePointer = useMedia('(pointer: coarse)')
   // deps boş: simülasyon bir kez kurulur, kuruluştaki işaretçi türü kullanılır
-  const { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa, power } = useMemo(() => {
-    // ?kalite=yuksek|orta|dusuk|mobil → governor sabitlenir (test/ölçüm aracı)
-    const ASCII: Record<string, string> = { yuksek: 'yüksek', dusuk: 'düşük' }
-    const params = new URLSearchParams(window.location.search)
-    const q = params.get('kalite')
-    const pin = q ? (ASCII[q] ?? q) : undefined
-    const governor = new QualityGovernor(window.devicePixelRatio, coarsePointer, pin)
+  const { controller, governor, game, power, pins } = useMemo(() => {
+    // ölçüm/A-B pinlerinin tamamı tek yerde okunur ve belgelenir (bkz. pins.ts)
+    const pins = readPins(window.location.search)
+    const governor = new QualityGovernor(window.devicePixelRatio, coarsePointer, pins.qualityPin)
     const initial = PRESETS[DEFAULT_PRESET_ID]
     const sim = new Simulation(initial.engine, BODY_REGISTRY, initial.profile)
     // kıvılcım akışları (toplamalı Points) gemi MSAA hedefine girmez; render
     // hattının katmanını kompozisyon kökü verir (bkz. shipPass.ts)
     sim.particleLayer = PARTICLE_LAYER
-    // ?fps=120 → kare tavanı pinli başlar (test/ölçüm; HUD'dan da değişir)
-    const fpsCap = params.get('fps') === '120' ? 120 : 60
-    // ?butce=<ms> → GPU-meşgul bütçesini PİNLER (ölçüm aracı; güç modu, pil ve
-    // basınç tepkisi devre dışı). 0 = açılış ölçümü kapalı, eski FPS-tek davranış.
-    // Pinsizken bütçeyi PowerPolicy verir: cihaz sınıfından varsayılan mod
-    // (sessiz 7 / dengeli 10 / performans 14 ms), pilde ×0.75, sistem basıncı
-    // (Compute Pressure) kademe düşürür; HUD'dan elle mod seçilir.
-    const butceRaw = params.get('butce')
-    const power = new PowerPolicy(butceRaw === null ? null : Math.max(0, Number(butceRaw) || 0))
-    const controller = new LabController(sim, governor, BODY_REGISTRY, PRESETS, DEFAULT_PRESET_ID, fpsCap, power)
-    // ?delik=sgra|ss433|grs1915|3c273|cygx1 → o delikle açılır (ölçüm/paylaşım)
-    const hole = params.get('delik')
-    if (hole && PRESETS[hole]) controller.setHole(hole)
+    // güç politikası: bütçe pini varsa onu, yoksa cihaz sınıfı/pil/basınç/HUD seçimi
+    const power = new PowerPolicy(pins.budgetOverride)
+    const controller = new LabController(sim, governor, BODY_REGISTRY, PRESETS, DEFAULT_PRESET_ID, pins.fpsCap, power)
+    if (pins.hole && PRESETS[pins.hole]) controller.setHole(pins.hole)
     const game = new GameController(controller)
-    // ?bloom=0|1 → parlama pini (ölçüm/karşılaştırma); yoksa kalite kademesi karar verir
-    const b = params.get('bloom')
-    const bloomPin = b === null ? null : b !== '0'
-    // ?tablo=0 → Bruneton tabloları kapalı, eski marş (A/B ölçümü)
-    const tables = params.get('tablo') !== '0'
-    // ?b2=0 → disk kesişimleri tablodan ÇIKARILIR, hepsi marşa döner (A/B ölçümü).
-    // Varsayılan AÇIK. Faz B3'ten beri YAKALANAN ışın da tabloda (gölge önündeki
-    // disk): marşa düşen piksel %0, marş yalnız jet için kaldı. Ölçüm 'yüksek',
-    // 2.89 Mpix: B2 11.55 ms → B3 7.9 ms; aynı karede tam marş 30.85 ms.
-    // (B3'ün ilk ölçümü 8.55 ms idi ve ?fps=120'nin 8.33 ms'lik kare yuvasına
-    //  çarpmış bir vsync artefaktıydı; doğrusu ölçek eğrisinden geliyor —
-    //  kare ≈ 2.2 ms + 1.97 ms × Mpix. Bkz. bruneton-dogrulama/README.md.)
-    const b2 = params.get('b2') !== '0'
-    // ?fon=0.6 → katmanlı render ölçeği PİNLENİR (A/B ölçümü). Pin yoksa
-    // ölçeği kalite kademesi belirler (QualityGovernor.levels).
-    const fonRaw = params.get('fon')
-    const fon = Number(fonRaw)
-    const lensScale =
-      fonRaw !== null && Number.isFinite(fon) && fon > 0 ? Math.min(Math.max(fon, 0.3), 1) : null
-    // Tuval MSAA'sı VARSAYILAN KAPALI: ölçüldü, 0.27 ms/Mpix (8.3 Mpix'te 2.2 ms,
-    // karenin %11'i) ve yalnız gemi kenarlarına hizmet ediyordu — lens tam ekran
-    // quad. Gemi kenar yumuşatmasını artık kırpılmış MSAA hedef verir
-    // (scene/shipPass.ts). ?aa=1 → eski tuval MSAA'sı (A/B); ?gemiaa=0 → gemi
-    // eski yolla doğrudan tuvale. İkisi birden = tam eski görüntü/maliyet.
-    // Bağlam özniteliği çalışma anında değişmez; yalnız yüklenişte okunur.
-    const aa = params.get('aa') === '1'
-    const shipMsaa = params.get('gemiaa') !== '0'
-    return { controller, governor, game, bloomPin, tables, b2, lensScale, aa, shipMsaa, power }
+    return { controller, governor, game, power, pins }
   }, [])
   // oyun modunda serbest kamera kapanır; GameCamera devralır
   const gameActive = useGameSnapshot(game).active
@@ -92,7 +54,7 @@ export default function App() {
         style={{ position: 'fixed', inset: 0, cursor: 'crosshair' }}
         flat
         frameloop="never"
-        gl={{ antialias: aa, powerPreference: 'high-performance' }}
+        gl={{ antialias: pins.aa, powerPreference: 'high-performance' }}
         camera={{ fov: 55, near: 0.05, far: 300, position: [2.2, 1.15, 13.2] }}
       >
         <FrameLoopDriver controller={controller} />
@@ -109,7 +71,7 @@ export default function App() {
         <CameraRewind controller={controller} />
         <GameLoop game={game} />
         <GameCamera game={game} />
-        <LensedBackground controller={controller} governor={governor} tables={tables} b2={b2} />
+        <LensedBackground controller={controller} governor={governor} tables={pins.tables} b2={pins.b2} />
         <HorizonOccluders />
         <Lights />
         <SimulationLayer controller={controller} />
@@ -117,9 +79,9 @@ export default function App() {
         {/* En sonda: öncelikli useFrame ile kareyi devralır (bkz. PostFx) */}
         <PostFx
           governor={governor}
-          pin={bloomPin}
-          lensScale={lensScale}
-          shipMsaa={shipMsaa}
+          pin={pins.bloomPin}
+          lensScale={pins.lensScale}
+          shipMsaa={pins.shipMsaa}
           power={power}
         />
       </Canvas>

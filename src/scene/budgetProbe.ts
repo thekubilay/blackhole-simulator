@@ -158,6 +158,17 @@ export class BudgetProbe {
    */
   frame(dt: number, mpix: number): number {
     if (this.phase === 'off') return 1
+    // Governor pinliyken (?kalite=, elle seçim) tavan yok sayılır: ölçüm kimsenin
+    // kullanmadığı bir sayı için ~25 ağır kare ve ölçüm oturumunun ilk saniyesini
+    // kirletir. Koşma; otomatiğe dönülünce settle'dan başla. Pin ölçüm ortasında
+    // gelirse askıyı kaldır.
+    if (!this.governor.auto) {
+      if (this.phase !== 'done' && this.phase !== 'settle') {
+        this.governor.setSuspended(false)
+        this.enter('settle')
+      }
+      return (this.lastRepeats = 1)
+    }
     const capMs = 1000 / this.governor.frameCap
     // gizli sekme / uzun takılma: örnek değil, durum ilerlemez
     const valid = dt > 0 && dt < 0.5 && !document.hidden

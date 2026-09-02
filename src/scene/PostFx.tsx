@@ -5,7 +5,7 @@ import type { QualityGovernor } from '../sim/QualityGovernor'
 import type { PowerPolicy } from '../sim/PowerPolicy'
 import { getBloomPipeline, supportsHdrPost } from './bloom'
 import { BudgetProbe } from './budgetProbe'
-import { classifyDevice, rendererString, watchBattery, watchPressure } from './powerSensors'
+import { classifyDevice, persistPowerMode, rendererString, watchBattery, watchPressure } from './powerSensors'
 
 /**
  * Bloom hattını süren sürücü. `useFrame`'e 1 önceliği verilmesi R3F'in
@@ -46,6 +46,9 @@ function BloomDriver({
     // sim/PowerPolicy.ts, scene/powerSensors.ts.
     const { cls, mode } = classifyDevice(rendererString(gl), window.matchMedia('(pointer: coarse)').matches)
     power.setDevice(cls, mode)
+    // elle seçilmiş güç modu kalıcıdır (localStorage); cihaz varsayılanından sonra
+    // uygulanır ki elle seçim kazansın
+    const stopPersist = persistPowerMode(power)
     const apply = () => {
       probe.setBudget(power.budgetMs)
       probe.setExtraDrop(power.extraDrop)
@@ -62,6 +65,7 @@ function BloomDriver({
     }
     return () => {
       stopPolicy()
+      stopPersist()
       stopBattery()
       stopPressure()
     }

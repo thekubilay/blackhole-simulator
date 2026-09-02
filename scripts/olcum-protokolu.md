@@ -83,6 +83,8 @@ referans %1 içinde eşleşince karşılaştırma güvenilir sayıldı.
 
 ## 5. Kancalar (yalnız DEV)
 
+URL pinlerinin tam listesi ve anlamları kodda tek yerde: `src/pins.ts`.
+
 | kanca | ne yapar |
 |---|---|
 | `__lens.b2 = 0 / 1` | tablo yolu ↔ tam marş, AYNI karede (sayfa yenilemesi gerekmez) |
@@ -310,10 +312,19 @@ gemi hedefi · gemi quad'ı · **parçacıklar (katman 4)**. Pod ölüp sahneden
 çıkınca gemi hedefi atlanır (11), akış da temizlenince 9. GL hatası 0, DEV
 uyarısı yok.
 
-**Bulunup DÜZELTİLMEYEN (bilinçli):** App.tsx'teki URL pini ayrıştırması
-(kalite, fps, delik, bloom, tablo, b2, fon, aa, gemiaa, butce) tek fonksiyona
-toplanabilir (OCP); `?kalite=` pinliyken probe'un ağır kareleri; mod
-kalıcılığı. Kod yavaşlatan bir kalıp bulunmadı: kare başına ek iş `traverseVisible`
+**İkinci tur (kullanıcı "kapatman gerekenleri kapat"):**
+- URL pinleri tek yerde: `src/pins.ts` `readPins(search)` → tipli `Pins`
+  nesnesi, her pin belgesiyle. App.tsx yalnız kurar (OCP). `?oyun=` GameController'da.
+- Governor pinliyken (`?kalite=`, elle seçim) probe koşmaz: tavan zaten yok
+  sayılıyordu, ~25 ağır kare ve ölçüm oturumunun ilk saniyesi boşa gidiyordu.
+  Otomatiğe dönülünce settle'dan başlar; pin ölçüm ortasında gelirse askı kalkar.
+- Güç modu kalıcı: yalnız ELLE seçim `localStorage` (`kdl.gucModu`) — otomatik
+  seçim saklanmaz, `?butce=` ezer, depolama engelliyse sessiz. Kalite/fps
+  bilerek kalıcı değil (deneme ayarları); güç modu cihazın fanına verilen cevap.
+- BIRAKILAN: model oranları (0.25/0.27) ve dolly başındaki ölçüm noktası —
+  gerçek cihaz ölçümüyle kapanır, kodla değil; FPS ağı sapmayı örter.
+
+Kod yavaşlatan bir kalıp bulunmadı: kare başına ek iş `traverseVisible`
 (onlarca nesne), 8 köşe projeksiyonu/mesh, `PowerPolicy.tick` (birkaç
 karşılaştırma), `probe.frame` (aritmetik).
 
